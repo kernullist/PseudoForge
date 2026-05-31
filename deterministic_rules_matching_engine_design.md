@@ -157,12 +157,17 @@ rename
 semantic_comment
 ```
 
+Allowed v2 preview/export-only emission kinds:
+
+```text
+call_arg_rewrite
+```
+
 Future reserved kinds:
 
 ```text
 warning
 cleanup_label
-call_arg_rewrite
 text_rewrite
 symbol_alias
 flow
@@ -213,6 +218,12 @@ rename
 semantic_comment
 ```
 
+Supported preview/export-only v2 phases:
+
+```text
+call_arg_rewrite
+```
+
 Reserved future phases:
 
 ```text
@@ -220,7 +231,6 @@ symbol_alias
 warning
 cleanup_label
 flow
-call_arg_rewrite
 text_rewrite
 ```
 
@@ -235,7 +245,8 @@ Recommended policy:
 7. `call_arg_rewrite` emits profile-backed argument rewrite candidates.
 8. `text_rewrite` requires a semantic comment gate, confidence gate, and export-only behavior.
 
-Until implemented, reserved phases must be rejected by the validator.
+Except for v2 `call_arg_rewrite`, reserved phases must be rejected by the
+validator until they have explicit preview/export-only boundaries.
 
 ## JSON Rule Format
 
@@ -321,6 +332,43 @@ Semantic comment rule example:
   }
 }
 ```
+
+Preview-only v2 call argument rewrite example:
+
+```json
+{
+  "schema_version": 2,
+  "id": "project.call_arg_rewrites",
+  "description": "Preview-only call argument rewrite candidates.",
+  "rules": [
+    {
+      "id": "project.call_arg_rewrite.probe_size",
+      "phase": "call_arg_rewrite",
+      "priority": 50,
+      "confidence": 0.90,
+      "scope": {
+        "calls_any": ["ProbeForRead"]
+      },
+      "match": {
+        "text_contains": "ProbeForRead"
+      },
+      "emit": {
+        "kind": "call_arg_rewrite",
+        "function_name": "ProbeForRead",
+        "argument_index": 1,
+        "replacement": "sizeof(*inputBuffer)",
+        "preview_only": true,
+        "evidence": "Size argument can be explained in preview output"
+      }
+    }
+  ]
+}
+```
+
+The validator requires `preview_only: true` and a `calls_any` or `calls_all`
+scope gate. Static `function_name` values must appear in that gate; binding-based
+function names are allowed only with an explicit call scope gate for later typed
+matchers.
 
 Current v1 application procedure:
 

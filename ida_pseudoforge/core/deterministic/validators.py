@@ -7,10 +7,13 @@ from typing import Any
 
 from ida_pseudoforge.core.deterministic.schema import (
     FORBIDDEN_RULE_KEYS,
-    SUPPORTED_EMISSION_KINDS,
     SUPPORTED_MATCH_OPERATORS,
-    SUPPORTED_PHASES,
     SUPPORTED_SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
+    SUPPORTED_V1_EMISSION_KINDS,
+    SUPPORTED_V1_PHASES,
+    SUPPORTED_V2_EMISSION_KINDS,
+    SUPPORTED_V2_PHASES,
     SUPPORTED_SCOPE_OPERATORS,
 )
 
@@ -40,12 +43,9 @@ def validate_rule_pack_data(data: dict[str, Any], source_path: str = "") -> list
         errors.append("rule pack contains forbidden execution or network field")
 
     schema_version = data.get("schema_version")
-    if (
-        not isinstance(schema_version, int)
-        or isinstance(schema_version, bool)
-        or schema_version != SUPPORTED_SCHEMA_VERSION
-    ):
+    if not _is_supported_schema_version(schema_version):
         errors.append("unsupported schema_version %r" % (schema_version,))
+        schema_version = SUPPORTED_SCHEMA_VERSION
 
     pack_id = data.get("id")
     if not isinstance(pack_id, str) or not pack_id.strip():
@@ -73,7 +73,7 @@ def validate_rule_pack_data(data: dict[str, Any], source_path: str = "") -> list
             errors.append("duplicate rule id %s" % rule_id)
         else:
             seen_rule_ids.add(rule_id)
-        errors.extend(_validate_rule(item, prefix))
+        errors.extend(_validate_rule(item, prefix, int(schema_version)))
 
     return errors
 
@@ -86,14 +86,15 @@ def validate_rule_pack_file(path: str | Path) -> list[str]:
     return validate_rule_pack_data(data, str(path))
 
 
-def _validate_rule(rule: dict[str, Any], prefix: str) -> list[str]:
+def _validate_rule(rule: dict[str, Any], prefix: str, schema_version: int) -> list[str]:
     errors: list[str] = []
     if _contains_forbidden_key(rule):
         errors.append("%s contains forbidden execution or network field" % prefix)
 
     phase = rule.get("phase")
-    if phase not in SUPPORTED_PHASES:
-        errors.append("%s.phase must be one of %s" % (prefix, ", ".join(sorted(SUPPORTED_PHASES))))
+    supported_phases = _supported_phases(schema_version)
+    if phase not in supported_phases:
+        errors.append("%s.phase must be one of %s" % (prefix, ", ".join(sorted(supported_phases))))
 
     confidence = rule.get("confidence")
     if not _is_real_number(confidence) or not 0.0 <= float(confidence) <= 1.0:
@@ -134,7 +135,9 @@ def _validate_rule(rule: dict[str, Any], prefix: str) -> list[str]:
     if not isinstance(emit, dict):
         errors.append("%s.emit must be an object" % prefix)
         return errors
-    errors.extend(_validate_emit(emit, phase, "%s.emit" % prefix))
+    errors.extend(_validate_emit(emit, phase, "%s.emit" % prefix, schema_version))
+    if phase == "call_arg_rewrite":
+        errors.extend(_validate_call_arg_rewrite_scope(scope, emit, "%s.scope" % prefix))
     return errors
 
 
@@ -224,11 +227,12 @@ def _is_real_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _validate_emit(emit: dict[str, Any], phase: object, prefix: str) -> list[str]:
+def _validate_emit(emit: dict[str, Any], phase: object, prefix: str, schema_version: int) -> list[str]:
     errors: list[str] = []
     kind = emit.get("kind")
-    if kind not in SUPPORTED_EMISSION_KINDS:
-        errors.append("%s.kind must be one of %s" % (prefix, ", ".join(sorted(SUPPORTED_EMISSION_KINDS))))
+    supported_kinds = _supported_emission_kinds(schema_version)
+    if kind not in supported_kinds:
+        errors.append("%s.kind must be one of %s" % (prefix, ", ".join(sorted(supported_kinds))))
         return errors
     if phase != kind:
         errors.append("%s.kind must match rule phase" % prefix)
@@ -244,7 +248,65 @@ def _validate_emit(emit: dict[str, Any], phase: object, prefix: str) -> list[str
         for field_name in ("comment_kind", "text"):
             if not isinstance(emit.get(field_name), str) or not emit.get(field_name):
                 errors.append("%s.%s is required" % (prefix, field_name))
+    elif kind == "call_arg_rewrite":
+        errors.extend(_validate_call_arg_rewrite_emit(emit, prefix))
     return errors
+
+
+def _validate_call_arg_rewrite_emit(emit: dict[str, Any], prefix: str) -> list[str]:
+    errors: list[str] = []
+    for field_name in ("function_name", "replacement"):
+        if not isinstance(emit.get(field_name), str) or not emit.get(field_name):
+            errors.append("%s.%s is required" % (prefix, field_name))
+    argument_index = emit.get("argument_index")
+    if not isinstance(argument_index, int) or isinstance(argument_index, bool) or argument_index < 0:
+        errors.append("%s.argument_index must be a non-negative integer" % prefix)
+    if emit.get("preview_only") is not True:
+        errors.append("%s.preview_only must be true" % prefix)
+    return errors
+
+
+def _validate_call_arg_rewrite_scope(scope: dict[str, Any], emit: dict[str, Any], prefix: str) -> list[str]:
+    function_name = emit.get("function_name")
+    if not isinstance(function_name, str) or not function_name:
+        return []
+    if "$" in function_name:
+        if _has_call_scope_gate(scope):
+            return []
+        return ["%s must gate call_arg_rewrite with calls_any/calls_all" % prefix]
+    if _scope_calls_include(scope.get("calls_any"), function_name):
+        return []
+    if _scope_calls_include(scope.get("calls_all"), function_name):
+        return []
+    return ["%s must gate call_arg_rewrite with calls_any/calls_all for %s" % (prefix, function_name)]
+
+
+def _has_call_scope_gate(scope: dict[str, Any]) -> bool:
+    return "calls_any" in scope or "calls_all" in scope
+
+
+def _scope_calls_include(value: object, function_name: str) -> bool:
+    if isinstance(value, str):
+        return value == function_name
+    if isinstance(value, list):
+        return function_name in value
+    return False
+
+
+def _is_supported_schema_version(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value in SUPPORTED_SCHEMA_VERSIONS
+
+
+def _supported_phases(schema_version: int) -> set[str]:
+    if schema_version <= 1:
+        return SUPPORTED_V1_PHASES
+    return SUPPORTED_V2_PHASES
+
+
+def _supported_emission_kinds(schema_version: int) -> set[str]:
+    if schema_version <= 1:
+        return SUPPORTED_V1_EMISSION_KINDS
+    return SUPPORTED_V2_EMISSION_KINDS
 
 
 def _contains_forbidden_key(value: Any) -> bool:

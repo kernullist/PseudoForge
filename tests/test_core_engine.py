@@ -1533,9 +1533,9 @@ NTSTATUS __fastcall NtSetInformationProcess(ULONG_PTR BugCheckParameter1, __int6
 """
 
 
-def _rule_pack(rules):
+def _rule_pack(rules, schema_version: int = 1):
     return {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "id": "test.rules",
         "description": "test rules",
         "rules": rules,
@@ -1574,6 +1574,29 @@ def _rename_rule(
     if not override_of:
         del rule["override_of"]
     return rule
+
+
+def _call_arg_rewrite_rule() -> dict:
+    return {
+        "id": "test.call_arg_rewrite.v2",
+        "phase": "call_arg_rewrite",
+        "priority": 50,
+        "confidence": 0.90,
+        "scope": {
+            "calls_any": ["ProbeForRead"]
+        },
+        "match": {
+            "text_contains": "ProbeForRead"
+        },
+        "emit": {
+            "kind": "call_arg_rewrite",
+            "function_name": "ProbeForRead",
+            "argument_index": 1,
+            "replacement": "sizeof(*inputBuffer)",
+            "preview_only": True,
+            "evidence": "preview-only call argument rewrite"
+        },
+    }
 
 
 class CoreEngineTests(unittest.TestCase):
@@ -1672,6 +1695,88 @@ class CoreEngineTests(unittest.TestCase):
             invalid_schema_path = temp_path / "invalid_schema.json"
             invalid_schema_path.write_text(json.dumps(invalid_schema), encoding="utf-8")
             self.assertTrue(any("unsupported schema_version" in error for error in validate_rule_pack_file(invalid_schema_path)))
+
+    def test_rule_pack_validator_accepts_v2_call_arg_rewrite_preview_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            valid_path = temp_path / "valid_v2_call_arg.json"
+            valid_path.write_text(json.dumps(_rule_pack([_call_arg_rewrite_rule()], schema_version=2)), encoding="utf-8")
+
+            self.assertEqual(validate_rule_pack_file(valid_path), [])
+
+            v1_path = temp_path / "v1_call_arg_rejected.json"
+            v1_path.write_text(json.dumps(_rule_pack([_call_arg_rewrite_rule()])), encoding="utf-8")
+            self.assertTrue(any("phase" in error for error in validate_rule_pack_file(v1_path)))
+
+            not_preview = _call_arg_rewrite_rule()
+            not_preview["emit"]["preview_only"] = False
+            not_preview_path = temp_path / "not_preview.json"
+            not_preview_path.write_text(json.dumps(_rule_pack([not_preview], schema_version=2)), encoding="utf-8")
+            self.assertTrue(any("preview_only must be true" in error for error in validate_rule_pack_file(not_preview_path)))
+
+            bad_argument = _call_arg_rewrite_rule()
+            bad_argument["emit"]["argument_index"] = -1
+            bad_argument_path = temp_path / "bad_argument.json"
+            bad_argument_path.write_text(json.dumps(_rule_pack([bad_argument], schema_version=2)), encoding="utf-8")
+            self.assertTrue(any("argument_index" in error for error in validate_rule_pack_file(bad_argument_path)))
+
+            missing_call_gate = _call_arg_rewrite_rule()
+            missing_call_gate["scope"] = {"text_contains": "ProbeForRead"}
+            missing_call_gate_path = temp_path / "missing_call_gate.json"
+            missing_call_gate_path.write_text(json.dumps(_rule_pack([missing_call_gate], schema_version=2)), encoding="utf-8")
+            self.assertTrue(any("must gate call_arg_rewrite" in error for error in validate_rule_pack_file(missing_call_gate_path)))
+
+            binding_function = _call_arg_rewrite_rule()
+            binding_function["emit"]["function_name"] = "$callee"
+            binding_function["scope"] = {"text_contains": "ProbeForRead"}
+            binding_function_path = temp_path / "binding_function.json"
+            binding_function_path.write_text(json.dumps(_rule_pack([binding_function], schema_version=2)), encoding="utf-8")
+            self.assertTrue(any("must gate call_arg_rewrite" in error for error in validate_rule_pack_file(binding_function_path)))
+
+    def test_rule_engine_emits_v2_call_arg_rewrite_without_plan_conversion(self):
+        capture = capture_from_pseudocode(
+            """
+__int64 __fastcall RuleCallArgSample(void *inputBuffer)
+{
+  ProbeForRead(inputBuffer, 8, 1);
+  return 0;
+}
+"""
+        )
+        pack = RulePack(
+            schema_version=2,
+            id="test.rules",
+            description="test",
+            rules=[
+                Rule(
+                    id="test.call_arg_rewrite.v2",
+                    phase="call_arg_rewrite",
+                    priority=50,
+                    confidence=0.90,
+                    scope={"calls_any": ["ProbeForRead"]},
+                    match={"text_contains": "ProbeForRead"},
+                    emit={
+                        "kind": "call_arg_rewrite",
+                        "function_name": "ProbeForRead",
+                        "argument_index": 1,
+                        "replacement": "sizeof(*inputBuffer)",
+                        "preview_only": True,
+                        "evidence": "preview-only call argument rewrite",
+                    },
+                )
+            ],
+        )
+
+        result = RuleEngine([pack]).run(build_rule_context(capture), phases={"call_arg_rewrite"})
+
+        self.assertEqual(1, len(result.emissions))
+        emission = result.emissions[0]
+        self.assertEqual("call_arg_rewrite", emission.kind)
+        self.assertEqual("ProbeForRead", emission.payload["function_name"])
+        self.assertEqual(1, emission.payload["argument_index"])
+        self.assertTrue(emission.payload["preview_only"])
+        self.assertEqual([], emissions_to_renames(result.emissions))
+        self.assertEqual([], emissions_to_comments(result.emissions))
 
     def test_rule_engine_assignment_regex_binding_and_scope_gate(self):
         capture = capture_from_pseudocode(

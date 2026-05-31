@@ -5,16 +5,29 @@ from typing import Any
 
 
 SUPPORTED_SCHEMA_VERSION = 1
+SUPPORTED_SCHEMA_VERSIONS = {1, 2}
 
-SUPPORTED_PHASES = {
+SUPPORTED_V1_PHASES = {
     "rename",
     "semantic_comment",
 }
 
-SUPPORTED_EMISSION_KINDS = {
+SUPPORTED_V2_PHASES = SUPPORTED_V1_PHASES | {
+    "call_arg_rewrite",
+}
+
+SUPPORTED_PHASES = SUPPORTED_V2_PHASES
+
+SUPPORTED_V1_EMISSION_KINDS = {
     "rename",
     "semantic_comment",
 }
+
+SUPPORTED_V2_EMISSION_KINDS = SUPPORTED_V1_EMISSION_KINDS | {
+    "call_arg_rewrite",
+}
+
+SUPPORTED_EMISSION_KINDS = SUPPORTED_V2_EMISSION_KINDS
 
 SUPPORTED_SCOPE_OPERATORS = {
     "calls_any",

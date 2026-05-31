@@ -50,6 +50,8 @@ def build_emission(rule: Rule, match: RuleMatch, report: RuleReport) -> RuleEmis
         return _build_rename_emission(rule, match, report)
     if kind == "semantic_comment":
         return _build_comment_emission(rule, match, report)
+    if kind == "call_arg_rewrite":
+        return _build_call_arg_rewrite_emission(rule, match, report)
     _reject(report, rule, "unsupported emission kind %s" % kind)
     return None
 
@@ -103,6 +105,42 @@ def _build_comment_emission(rule: Rule, match: RuleMatch, report: RuleReport) ->
         payload={
             "comment_kind": comment_kind,
             "text": text,
+            "evidence": evidence,
+        },
+    )
+
+
+def _build_call_arg_rewrite_emission(rule: Rule, match: RuleMatch, report: RuleReport) -> RuleEmission | None:
+    emit = rule.emit or {}
+    function_name = _resolve_binding(str(emit.get("function_name", "")), match.bindings)
+    replacement = _resolve_binding(str(emit.get("replacement", "")), match.bindings)
+    argument_index = emit.get("argument_index")
+    if not function_name or not replacement:
+        _reject(report, rule, "call_arg_rewrite function_name or replacement could not be resolved")
+        return None
+    if not isinstance(argument_index, int) or isinstance(argument_index, bool) or argument_index < 0:
+        _reject(report, rule, "call_arg_rewrite argument_index is invalid")
+        return None
+    if emit.get("preview_only") is not True:
+        _reject(report, rule, "call_arg_rewrite must be preview_only")
+        return None
+    evidence = _resolve_binding(str(emit.get("evidence", "") or rule.id), match.bindings)
+    return RuleEmission(
+        kind="call_arg_rewrite",
+        rule_id=rule.id,
+        confidence=rule.confidence,
+        priority=rule.priority,
+        source_path=rule.source_path,
+        source_label=rule.source_label,
+        source_order=rule.source_order,
+        override_of=rule.override_of,
+        evidence=evidence,
+        payload={
+            "function_name": function_name,
+            "argument_index": argument_index,
+            "replacement": replacement,
+            "preview_only": True,
+            "source": "rule",
             "evidence": evidence,
         },
     )

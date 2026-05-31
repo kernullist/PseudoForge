@@ -372,12 +372,36 @@ python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation
 
 ## P1: Deterministic Rules V2 Rewrite Phases
 
+Status: In progress.
+
+Completed:
+
+- [x] Added `schema_version: 2` validation support for preview-only
+  `call_arg_rewrite` rules.
+- [x] Required v2 `call_arg_rewrite` emissions to declare `preview_only: true`,
+  a target function name, a non-negative argument index, and a replacement.
+- [x] Required static v2 `call_arg_rewrite` function names to be gated by
+  matching `calls_any`/`calls_all` scope.
+- [x] Added runtime `RuleEmission(kind="call_arg_rewrite")` support without
+  converting those emissions into rename/comment plan outputs or IDB writes.
+- [x] Documented the v2 preview-only boundary in
+  `deterministic_rules_matching_engine_design.md`.
+
+Remaining:
+
+- [ ] Add reporting for applied, shadowed, and rejected rewrite emissions.
+- [ ] Mirror one low-risk hard-coded call-argument rewrite family for parity
+  comparison.
+- [ ] Add `text_rewrite` only after span conflict detection exists.
+- [ ] Add `flow` only after stronger branch evidence exists.
+
 ### Current Evidence
 
-- `deterministic_rules_matching_engine_design.md` reserves `call_arg_rewrite`,
-  `text_rewrite`, and `flow`.
-- `ida_pseudoforge/core/deterministic/validators.py` currently accepts only
-  supported v1 phases and requires emit kind to match phase.
+- `deterministic_rules_matching_engine_design.md` documents v2
+  `call_arg_rewrite` as preview/export-only and still reserves `text_rewrite`
+  and `flow`.
+- `ida_pseudoforge/core/deterministic/validators.py` accepts v1 rename/comment
+  phases and v2 preview-only `call_arg_rewrite`, with emit kind matching phase.
 - `ida_pseudoforge/core/deterministic/context.py:55` builds regex-oriented
   facts: assignments, calls, labels, and literals.
 - Existing hard-coded rewrites remain in `kernel_rewrites.py`, `kernel_api.py`,

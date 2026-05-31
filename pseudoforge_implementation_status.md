@@ -175,7 +175,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 198 unit tests
+   - current suite covers 200 unit tests
 
 ## Latest Implementation Notes
 
@@ -221,6 +221,19 @@ P1 export artifact parity update:
   CLI, and IDA Free CLI.
 - `tests/test_export_bundle.py` covers parity artifact creation and summary
   metadata.
+
+P1 deterministic rules v2 preview boundary update:
+
+- Rule packs can use `schema_version: 2` for preview-only
+  `call_arg_rewrite` emissions.
+- `call_arg_rewrite` rules must declare `preview_only: true`, a target function
+  name, a non-negative argument index, and a replacement.
+- Static target function names must be gated by matching `calls_any`/`calls_all`
+  scope so v2 rewrite candidates do not match only on broad text evidence.
+- Runtime support emits `RuleEmission(kind="call_arg_rewrite")` but does not
+  convert it into rename/comment plan outputs or any IDB write path.
+- `deterministic_rules_matching_engine_design.md` documents the v2
+  preview/export-only boundary.
 
 P0 rename identity hardening update:
 
