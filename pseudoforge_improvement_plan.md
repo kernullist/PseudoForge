@@ -902,12 +902,33 @@ conflict risk and makes it harder to identify which subsystem owns a regression.
 
 ## P2: IDA UX And Long-Running Operation Improvements
 
+Status: In progress.
+
+Completed:
+
+- [x] Added deterministic rule-report diagnostics to the IDA analysis completion
+  summary, including matched rules, rewrite status counts, load errors, and
+  validation errors.
+
+Remaining:
+
+- [ ] Keep `simplecustviewer_t` as the fallback path while adding any richer
+  dockable review UI.
+- [ ] Add a dockable side-by-side review panel behind a feature flag.
+- [ ] Add full non-blocking LLM model discovery refresh.
+- [ ] Add cancellation/progress hooks for long LLM and batch work where IDA APIs
+  allow it.
+- [ ] Add richer rule load/validation details to preview/export diagnostics
+  without expanding context menus.
+
 ### Current Evidence
 
 - The simple custom viewer has preview size/highlight limits in
   `ida_pseudoforge/ida/ui_preview.py`.
 - The status document defers full non-blocking LLM model discovery.
 - The README lists a richer dockable side-by-side preview panel as pending.
+- The IDA analysis completion summary now includes rule-report diagnostic
+  counts before the user opens the detailed JSON report.
 
 ### Problem
 

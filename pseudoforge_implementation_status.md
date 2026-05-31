@@ -504,6 +504,14 @@ P0 rename identity hardening update:
 - Focused safety tests cover identity match, identity drift rejection, and
   legacy fallback plus enriched location anchor extraction.
 
+P2 IDA UX diagnostics update:
+
+- The IDA analysis completion summary now includes deterministic rule-report
+  counts for matched rules, rewrite emissions by status, rule-pack load errors,
+  and validation errors.
+- Detailed rule diagnostics remain in the exported `rule-report.json`; the
+  summary only exposes concise counts.
+
 The current implementation state reflects the `NtSetSystemInformation` and `NtSetInformationProcess` large-dispatcher regression pass:
 
 - `NtSetSystemInformation` preview now uses the canonical native API signature and introduces typed `__m128i *` aliases without changing the underlying decompiler body semantics.

@@ -153,6 +153,8 @@ Implemented:
    - Preview-only `call_arg_rewrite` reports.
    - Preview-only `text_rewrite` reports with semantic comment gates and span
      conflict detection.
+26. IDA analysis completion summaries include deterministic rule diagnostic
+    counts.
 
 Still pending:
 

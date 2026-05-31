@@ -355,6 +355,42 @@ class IdaPluginSafetyTests(unittest.TestCase):
         self.assertEqual(len(lvars), 1)
         self.assertEqual(lvars[0].location, "defea:0x140001020")
 
+    def test_analysis_summary_includes_rule_report_diagnostics(self):
+        capture = _capture()
+        plan = _plan(capture)
+        plan.rule_report = {
+            "matched_rules": [{"rule_id": "one"}, {"rule_id": "two"}],
+            "rewrite_emissions": [
+                {"status": "applied"},
+                {"status": "shadowed"},
+                {"status": "rejected"},
+            ],
+            "load_errors": [{"path": "bad.json"}],
+            "validation_errors": [{"path": "invalid.json"}],
+        }
+
+        summary = actions_module._format_analysis_summary(capture, plan)
+
+        self.assertIn(
+            "Rules: 2 matched, 1 rewrite(s) applied, 1 shadowed, 1 rejected, 1 load error(s), 1 validation error(s)",
+            summary,
+        )
+
+    def test_analysis_summary_ignores_malformed_rule_report_rewrites(self):
+        capture = _capture()
+        plan = _plan(capture)
+        plan.rule_report = {
+            "matched_rules": [{"rule_id": "one"}],
+            "rewrite_emissions": None,
+        }
+
+        summary = actions_module._format_analysis_summary(capture, plan)
+
+        self.assertIn(
+            "Rules: 1 matched, 0 rewrite(s) applied, 0 shadowed, 0 rejected, 0 load error(s), 0 validation error(s)",
+            summary,
+        )
+
     def test_apply_calls_rename_lvar_only_after_preflight_passes(self):
         capture = _capture()
         plan = _plan(capture)
