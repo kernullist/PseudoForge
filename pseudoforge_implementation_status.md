@@ -200,6 +200,7 @@ Implemented in this folder:
    - `tests/test_render_style.py`
    - `tests/test_render_warnings.py`
    - `tests/test_render_zw.py`
+   - `tests/test_rule_pack_validator.py`
    - `tests/test_rule_context.py`
    - `tests/test_ui_preview.py`
    - `tests/test_profile_loader.py`
@@ -397,6 +398,9 @@ P2 switch body reporting update:
   `tests/test_ui_preview.py`.
 - RuleContext call-site, assignment, local-variable identity, and
   profile-function fact regressions now live in `tests/test_rule_context.py`.
+- Deterministic rule-pack validator regressions now live in
+  `tests/test_rule_pack_validator.py`, with shared test rule builders in
+  `tests/rule_test_helpers.py`.
 
 P0 rename identity hardening update:
 

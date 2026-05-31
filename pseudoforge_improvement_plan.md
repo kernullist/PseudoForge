@@ -692,6 +692,9 @@ Completed:
   `tests/test_ui_preview.py`.
 - [x] Moved RuleContext call-site, assignment, local-variable identity, and
   profile-function fact regressions into `tests/test_rule_context.py`.
+- [x] Moved deterministic rule-pack validator regressions into
+  `tests/test_rule_pack_validator.py` and shared rule test builders into
+  `tests/rule_test_helpers.py`.
 
 Remaining:
 
@@ -702,8 +705,8 @@ Remaining:
 
 ### Current Evidence
 
-- `tests/test_core_engine.py` is about 5130 lines after the focused forge-store,
-  UI preview, and RuleContext splits.
+- `tests/test_core_engine.py` is about 4880 lines after the focused forge-store,
+  UI preview, RuleContext, and rule-pack validator splits.
 - Status literal rendering coverage now has a focused
   `tests/test_render_status.py` suite.
 - Dispatcher/profile literal coverage now has a focused
@@ -714,6 +717,9 @@ Remaining:
   `tests/test_ui_preview.py` suite.
 - RuleContext fact coverage now has a focused `tests/test_rule_context.py`
   suite.
+- Rule-pack validator coverage now has a focused
+  `tests/test_rule_pack_validator.py` suite, with reusable test rule builders
+  in `tests/rule_test_helpers.py`.
 - The status document already lists the historical monolith as deferred debt.
 - Test coverage is broad but organized mostly by accumulation rather than by
   subsystem.
