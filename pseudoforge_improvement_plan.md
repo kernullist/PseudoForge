@@ -661,9 +661,24 @@ cases share labels, cleanup tails, or fallthrough-like paths.
 
 ## P2: Test Suite Restructure
 
+Status: In progress.
+
+Completed:
+
+- [x] Moved flow/switch-outline regression coverage for shared tails, native
+  switch suppression, fallthrough, nested switches, and safe body expansion into
+  `tests/test_render_flow.py`.
+
+Remaining:
+
+- [ ] Continue moving subsystem-specific coverage out of `test_core_engine.py`
+  into focused domain suites.
+- [ ] Move shared fixtures into `tests/fixtures/` or `tests/helpers.py`.
+- [ ] Keep test count stable across each split commit.
+
 ### Current Evidence
 
-- `tests/test_core_engine.py` is about 5140 lines.
+- `tests/test_core_engine.py` is about 5600 lines.
 - The status document already lists the historical monolith as deferred debt.
 - Test coverage is broad but organized mostly by accumulation rather than by
   subsystem.
@@ -677,6 +692,7 @@ conflict risk and makes it harder to identify which subsystem owns a regression.
 
 1. Split `test_core_engine.py` into domain suites:
    - `test_plan_builder.py`
+   - `test_render_flow.py`
    - `test_render_status.py`
    - `test_render_dispatcher.py`
    - `test_render_driver_entry.py`

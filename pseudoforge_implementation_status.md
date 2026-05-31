@@ -372,6 +372,9 @@ P2 switch body reporting update:
 - Native switch recovery now handles `switch (...) {` brace placement on the
   switch line and has regression coverage for fallthrough cases plus nested
   switch cases that must not be promoted to the parent dispatcher.
+- Flow and switch-outline regressions now live in `tests/test_render_flow.py`
+  instead of adding more cases to the historical `test_core_engine.py`
+  monolith.
 
 P0 rename identity hardening update:
 
@@ -802,7 +805,7 @@ implemented:
 - New focused tests were added for kernel API profile building and LLM CLI provider execution.
 
 deferred:
-- The historical test_core_engine.py monolith still contains existing broad regression coverage.
+- The historical test_core_engine.py monolith still contains existing broad regression coverage, though renderer-specific tests are being moved into domain suites incrementally.
 - render.py, ida/actions.py, and ida/ui_preview.py remain candidates for later scoped extraction; they were not broadly rewritten in this pass to avoid behavior drift.
 ```
 
