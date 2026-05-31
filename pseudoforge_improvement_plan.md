@@ -743,6 +743,8 @@ Completed:
   dispatcher names, pointer-bound names, PascalCase locals, generic arguments,
   saved-argument copies, and numeric dispatcher temporaries into
   `tests/test_llm_rename_filters.py`.
+- [x] Moved success-accounting label-tail classification coverage into
+  `tests/test_render_labels.py`.
 
 Remaining:
 
@@ -753,11 +755,12 @@ Remaining:
 
 ### Current Evidence
 
-- `tests/test_core_engine.py` is 164 lines after the focused forge-store,
+- `tests/test_core_engine.py` is 134 lines after the focused forge-store,
   UI preview, RuleContext, rule-pack validator, RuleEngine, rule integration,
   IDA batch, LLM config, logging, release/version, kernel profile, DriverEntry,
   Memory Manager, IOCTL/IRP, callback, Zw/API, TraceLogging/flow, and signature
-  and NtSet/label/kernel-hint/style/rename-heuristic/LLM-filter splits.
+  and NtSet/label/kernel-hint/style/rename-heuristic/LLM-filter/label-tail
+  splits.
 - Status literal rendering coverage now has a focused
   `tests/test_render_status.py` suite.
 - Dispatcher/profile literal coverage now has a focused
@@ -804,6 +807,8 @@ Remaining:
 - Semantic-label stale-layout and duplicate-label coverage now lives in
   `tests/test_render_labels.py`, backed by shared fixtures in
   `tests/fixtures/kernel_samples.py`.
+- Success-accounting label-tail coverage now lives in
+  `tests/test_render_labels.py`.
 - Firmware handler kernel-driver semantics coverage now lives in
   `tests/test_render_kernel_hints.py`.
 - Multiline-condition brace and single-line if-body style coverage now lives in

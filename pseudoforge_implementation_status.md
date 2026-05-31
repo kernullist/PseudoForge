@@ -259,7 +259,7 @@ P1 renderer snapshot protection update:
   lives in `ida_pseudoforge/core/render_zw.py`.
 - Zw API probe, reused Zw status-slot, and `MmGetSystemRoutineAddress`
   indirect-call regressions now live in `tests/test_render_zw.py`; the core
-  monolith is 164 lines after the LLM rename-filter split.
+  monolith is 134 lines after the success-accounting label-tail split.
 - TraceLogging template switch false-positive regression now lives in
   `tests/test_render_flow.py`.
 - Known `PVOID` native signature/body-alias regression now lives in
@@ -269,6 +269,8 @@ P1 renderer snapshot protection update:
 - Semantic-label stale-layout and duplicate-label regressions now live in
   `tests/test_render_labels.py`, with reusable kernel samples in
   `tests/fixtures/kernel_samples.py`.
+- Success-accounting label-tail classification regression now lives in
+  `tests/test_render_labels.py`.
 - Firmware handler kernel-driver semantics regression now lives in
   `tests/test_render_kernel_hints.py`.
 - Multiline-condition brace and single-line if-body style regressions now live
@@ -805,6 +807,15 @@ LLM rename-filter test-suite split validation:
 
 ```text
 python -B -m unittest tests.test_llm_rename_filters tests.test_core_engine -v: 16 tests OK
+python -B -m unittest discover -s tests -v: 265 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+```
+
+Label-tail test-suite split validation:
+
+```text
+python -B -m unittest tests.test_render_labels tests.test_core_engine -v: 9 tests OK
 python -B -m unittest discover -s tests -v: 265 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 git diff --check -- .: passed

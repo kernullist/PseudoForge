@@ -130,35 +130,5 @@ __int64 __fastcall DuplicateInputLengthSample(int a1, void *a2, ULONG a3)
 
         self.assertFalse(any("Skipped duplicate target inputLength" in warning for warning in plan.warnings))
 
-    def test_success_accounting_label_is_not_cleanup_dispatch_tail(self):
-        capture = capture_from_pseudocode(
-            """
-unsigned __int64 __fastcall SuccessAccountingTailSample(unsigned int a1)
-{
-  unsigned __int64 result;
-
-  result = 0x1000LL;
-  if ( a1 )
-    goto LABEL_36;
-LABEL_36:
-  GlobalPageCount += a1;
-  return result;
-  v2 = *(_QWORD *)a1;
-  if ( v2 )
-    goto LABEL_36;
-LABEL_34:
-  __fastfail(3u);
-}
-"""
-        )
-        plan = build_clean_plan(capture)
-        roles = {item.label: item.classification for item in plan.cleanup_labels}
-        rendered = render_cleaned_pseudocode(capture, plan)
-
-        self.assertEqual(roles["LABEL_36"], "success_accounting_return_tail")
-        self.assertEqual(roles["LABEL_34"], "failfast_corrupt_list_entry")
-        self.assertIn("LABEL_36: success_accounting_return_tail", rendered)
-        self.assertNotIn("LABEL_36: cleanup_dispatch_tail", rendered)
-
 if __name__ == "__main__":
     unittest.main()
