@@ -1,0 +1,604 @@
+# PseudoForge Improvement Plan
+
+Date: 2026-05-31
+
+This plan records improvement work found by reading the current documentation,
+core analysis code, IDA integration code, CLI tooling, and tests. It is scoped to
+work that improves correctness, safety, maintainability, validation coverage, and
+operational usability without weakening PseudoForge's deterministic-first design.
+
+## Review Scope
+
+Reviewed documentation:
+
+- `README.md`
+- `pseudoforge_implementation_status.md`
+- `ida_pseudocode_refactor_plugin_design.md`
+- `deterministic_rules_matching_engine_design.md`
+- `samples/kernel_pattern_driver/README.md`
+
+Reviewed code areas:
+
+- Core plan construction, validation, flow recovery, rendering, kernel semantics,
+  kernel API rewrites, deterministic rules, profile loading, and forge storage.
+- IDA action, preview, async, apply, decompiler, and config-dialog integration.
+- Offline CLI, IDA Free CLI, IDA batch, release, profile-builder, and rule
+  validation tools.
+- Unit tests and current coverage layout.
+
+Generated profile payloads such as `ida_pseudoforge/profiles/kernel_api.json`
+were treated as generated data. The review focused on their loader, builder, size,
+metadata, and runtime impact rather than hand-reviewing every generated entry.
+
+## Priority Summary
+
+1. P0: Preserve the current safety boundary while improving rename identity.
+2. P1: Split the monolithic renderer and add snapshot-based output protection.
+3. P1: Reduce kernel profile load cost and add versioned profile selection.
+4. P1: Align interactive export artifacts with the IDA Free CLI artifact set.
+5. P1: Continue deterministic rules v2 with span-safe rewrite phases.
+6. P2: Improve switch body reconstruction without synthesizing unsafe bodies.
+7. P2: Split the test monolith into domain-focused suites.
+8. P2: Improve IDA UX for large previews, model discovery, and rule diagnostics.
+9. P3: Expand real-target validation and release/documentation hygiene.
+
+## P0: Safer Rename Identity Tracking
+
+### Current Evidence
+
+- `pseudoforge_implementation_status.md` lists ctree identity tracking as a known
+  incomplete area.
+- `ida_pseudoforge/core/lvar_analysis.py:35` builds a `CleanPlan` from text
+  captures and rename suggestions.
+- `ida_pseudoforge/core/validation.py:148` validates rename candidates by known
+  names, collisions, identifier shape, and LLM-specific heuristics.
+- `ida_pseudoforge/ida/apply_changes.py` performs final apply preflight, but the
+  final IDA write still depends on the old local name string reaching
+  `ida_hexrays.rename_lvar()`.
+
+### Problem
+
+The current string-name path is conservative and validator-gated, but it is still
+weaker than an identity-backed apply path. Decompiled locals can be renamed,
+merged, split, or shadowed between analysis and apply. The session fingerprint
+and stale-function checks reduce this risk, but they do not prove the selected
+old-name string maps to the same Hex-Rays local identity that was analyzed.
+
+### Plan
+
+1. Extend `FunctionCapture` local entries with stable IDA-side identity metadata
+   when running inside IDA:
+   - lvar index
+   - declaration type string
+   - storage/location text when available
+   - ctree location anchors where practical
+   - original name and normalized source fingerprint
+2. Add `RenameSuggestion.identity` or equivalent metadata for IDA-originated
+   arg/lvar candidates.
+3. Update apply preflight to compare the current cfunc lvar list against the
+   captured identity before calling `rename_lvar()`.
+4. Keep the current old-name fallback only for offline exports and for IDA
+   versions where identity metadata cannot be retrieved.
+5. Add focused tests with fake cfunc/lvar identity drift:
+   - same name, different identity: reject
+   - same identity, same function, same fingerprint: allow
+   - missing identity on legacy capture: require current conservative checks
+6. Add one manual IDA validation checklist item for rename apply after a local
+   type/name refresh.
+
+### Acceptance Criteria
+
+- Apply rejects same-name/different-identity drift before IDB modification.
+- Existing offline CLI behavior is unchanged.
+- Existing `apply_selected_renames()` tests continue to pass.
+- New tests cover identity mismatch, missing identity fallback, and successful
+  identity-backed apply.
+
+### Validation
+
+```powershell
+python -B -m unittest tests.test_ida_plugin_safety -v
+python -B -m unittest discover -s tests -v
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools
+git diff --check -- .
+```
+
+## P1: Renderer Decomposition And Snapshot Protection
+
+### Current Evidence
+
+- `ida_pseudoforge/core/render.py` is the largest production module at roughly
+  2630 lines.
+- `render_cleaned_pseudocode()` in `ida_pseudoforge/core/render.py:61` runs many
+  ordered text passes in one function.
+- `write_export_bundle()` in `ida_pseudoforge/core/render.py:885` is also mixed
+  into the render module.
+- Style normalization lives at `ida_pseudoforge/core/render.py:2602`, sharing the
+  same file with NTSTATUS, dispatcher, IOCTL, driver-entry, callback, and label
+  rewrites.
+
+### Problem
+
+The render pipeline is behavior-rich and already valuable, but the current file
+shape makes regression risk high. A local change to one rewrite family can
+silently affect unrelated output because ordering is implicit in one long
+function and many helper names live in the same namespace. Unit tests cover many
+cases, but they are mostly assertion-based rather than full rendered-output
+snapshots.
+
+### Plan
+
+1. Introduce a small `RenderContext` object containing `capture`, `plan`,
+   `rename_map`, `warnings`, and native switch metadata.
+2. Split render passes into scoped modules:
+   - `render/status.py`
+   - `render/dispatcher.py`
+   - `render/ioctl.py`
+   - `render/kernel_api.py`
+   - `render/driver_entry.py`
+   - `render/callbacks.py`
+   - `render/labels.py`
+   - `render/style.py`
+   - `render/export_bundle.py`
+3. Keep the public import path stable:
+   - `render_cleaned_pseudocode`
+   - `render_switch_outline`
+   - `render_flow_report`
+   - `write_export_bundle`
+4. Add golden snapshot fixtures for representative cases:
+   - native API dispatcher
+   - DriverEntry/device-extension cleanup
+   - IOCTL dispatch
+   - OB pre-operation callback
+   - generic non-kernel function
+5. Add a snapshot update workflow that is explicit and reviewable.
+6. Only move one rewrite family per commit to keep diff review sane.
+
+### Acceptance Criteria
+
+- Public render API remains compatible.
+- Snapshot failures show clean raw-vs-cleaned diffs.
+- No behavior changes occur during pure extraction commits unless explicitly
+  documented.
+- `render.py` becomes a thin compatibility layer or is removed after imports are
+  migrated.
+
+### Validation
+
+```powershell
+python -B -m unittest discover -s tests -v
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_smoke
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_smoke
+git diff --check -- .
+```
+
+## P1: Profile Loading, Size, And Version Management
+
+### Current Evidence
+
+- `ida_pseudoforge/profiles/kernel_api.json` is about 44 MB.
+- `ida_pseudoforge/profiles/loader.py:13` loads JSON profiles through an
+  unbounded `lru_cache`.
+- `ida_pseudoforge/core/kernel_api.py:127` loads the full kernel API profile for
+  symbol and function metadata lookup.
+- The implementation status records a single WDK 10.0.26100.0-generated profile
+  as the current broad profile.
+
+### Problem
+
+The full generated profile is convenient, but loading the entire 44 MB JSON
+payload is expensive in IDA startup and first-analysis contexts. It also bakes
+one WDK version into runtime behavior, while target binaries can come from
+different Windows builds. Silent JSON load failure currently returns `{}`, which
+keeps analysis alive but can hide profile corruption.
+
+### Plan
+
+1. Split generated profile output into smaller artifacts:
+   - `kernel_functions.json`
+   - `kernel_enums.json`
+   - `kernel_structures.json`
+   - `kernel_aliases.json`
+   - `kernel_macros.json`
+   - `kernel_symbol_index.json`
+   - `profile_manifest.json`
+2. Add loader APIs for specific lookup families instead of loading the whole
+   profile for every path.
+3. Add profile manifest metadata:
+   - WDK version
+   - generated timestamp
+   - header set
+   - entry counts
+   - generator version
+   - SHA-256 per split file
+4. Add optional target-build profile selection:
+   - default profile remains current behavior
+   - CLI and IDA settings can select a profile version
+   - batch mode records selected profile metadata in JSONL
+5. Turn profile JSON decode errors into warnings in export/batch reports while
+   keeping deterministic fallback behavior.
+6. Add performance smoke checks for cold profile load and repeated lookups.
+
+### Acceptance Criteria
+
+- First lookup only loads the minimum needed profile file.
+- Current generated metadata counts are preserved or intentionally documented.
+- Corrupt profile files produce visible warnings instead of silent empty
+  semantics.
+- Batch JSONL records the active profile manifest.
+
+### Validation
+
+```powershell
+python -B .\tools\build_kernel_api_profile.py --version 10.0.26100.0 --dry-run --summary --function ExAllocatePool2 --function MmCopyMemory
+python -B .\tools\build_status_codes_profile.py --version 10.0.26100.0 --dry-run --summary
+python -B -m unittest tests.test_kernel_api_profile_builder -v
+python -B -m unittest discover -s tests -v
+```
+
+## P1: Interactive Export Parity With IDA Free CLI
+
+### Current Evidence
+
+- `write_export_bundle()` writes cleaned pseudocode, switch outline, rename map,
+  flow report, and rule report.
+- `tools/pseudoforge_free_cli.py` adds raw pseudocode, warnings JSON,
+  raw-vs-cleaned diff, per-function summary JSON, and a run manifest.
+- `pseudoforge_implementation_status.md` explicitly defers aligning
+  interactive export artifacts with the IDA Free CLI output set.
+
+### Problem
+
+Interactive IDA export is the higher-trust workflow because it has live Hex-Rays
+context, but its artifact set is thinner than the IDA Free CLI path. Review,
+regression, and audit work should have the same raw/cleaned/diff/summary shape
+regardless of entrypoint.
+
+### Plan
+
+1. Move shared artifact writing into a reusable export module.
+2. Add optional raw pseudocode, warnings JSON, raw-vs-cleaned diff, and summary
+   JSON to interactive export.
+3. Keep existing artifact names stable.
+4. Record entrypoint metadata:
+   - `ida_interactive`
+   - `ida_batch`
+   - `ida_free_offline`
+5. Include version, function EA, target path identity, profile manifest, LLM
+   status, rule report status, and warning counts in the summary JSON.
+6. Add a README table comparing artifact parity across entrypoints.
+
+### Acceptance Criteria
+
+- Interactive export includes raw-vs-cleaned diff by default.
+- Existing scripts that consume current artifact names keep working.
+- IDA Free and IDA interactive summaries share a common schema where practical.
+
+### Validation
+
+```powershell
+python -B -m unittest tests.test_pseudoforge_free_cli -v
+python -B -m unittest tests.test_ida_plugin_safety -v
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_export_parity
+```
+
+## P1: Deterministic Rules V2 Rewrite Phases
+
+### Current Evidence
+
+- `deterministic_rules_matching_engine_design.md` reserves `call_arg_rewrite`,
+  `text_rewrite`, and `flow`.
+- `ida_pseudoforge/core/deterministic/validators.py` currently accepts only
+  supported v1 phases and requires emit kind to match phase.
+- `ida_pseudoforge/core/deterministic/context.py:55` builds regex-oriented
+  facts: assignments, calls, labels, and literals.
+- Existing hard-coded rewrites remain in `kernel_rewrites.py`, `kernel_api.py`,
+  and `render.py`.
+
+### Problem
+
+The rule engine is already useful for rename and semantic-comment rules, but the
+more valuable kernel cleanup behavior is still hard-coded. Moving everything at
+once would be risky. The next step should add rule phases that can report and
+shadow hard-coded behavior before they are allowed to replace it.
+
+### Plan
+
+1. Add a rule v2 schema version while keeping v1 compatibility.
+2. Add `call_arg_rewrite` as the first v2 phase:
+   - only preview/export output
+   - no IDB writes
+   - typed argument index and function-name gates required
+   - report applied/rejected rewrites
+3. Add `text_rewrite` after span conflict detection exists:
+   - explicit `before_regex`
+   - explicit `replacement`
+   - `requires_comment_kind` or equivalent semantic gate
+   - export-only by default
+4. Add `flow` only after match facts include enough branch evidence to avoid
+   overclaiming control-flow recovery.
+5. Mirror one low-risk hard-coded rewrite family first, then compare outputs.
+6. Keep hard-coded behavior active until parity snapshots pass.
+
+### Acceptance Criteria
+
+- Invalid v2 rules fail closed with useful validation errors.
+- Reports show matched, applied, shadowed, and rejected rewrite emissions.
+- Rule rewrites cannot touch IDB state.
+- At least one low-risk call-argument rewrite has parity coverage against the
+  existing hard-coded path.
+
+### Validation
+
+```powershell
+python -B .\tools\validate_pseudoforge_rules.py .\ida_pseudoforge\rules\builtin
+python -B -m unittest discover -s tests -v
+```
+
+## P2: Richer RuleContext And Dataflow Facts
+
+### Current Evidence
+
+- `RuleContext` currently indexes text with regex facts only.
+- Existing render and kernel rewrite code already contains argument splitting,
+  call-argument parsing, literal parsing, and helper-specific heuristics.
+
+### Problem
+
+V2 rules need stronger facts than text spans. Without typed call-site and
+assignment facts, JSON rules either become too weak to be useful or too broad to
+be safe. Reusing parser helpers also reduces duplicate parsing bugs.
+
+### Plan
+
+1. Add typed call-site facts:
+   - call name
+   - full argument list
+   - argument spans
+   - line index
+2. Add typed assignment facts:
+   - lhs
+   - rhs
+   - rhs identifiers
+   - literal values
+   - call expression if rhs is a call
+3. Add lvar type facts from `FunctionCapture.lvars`.
+4. Add profile facts for known functions and enums.
+5. Reuse existing `_split_arguments()` logic through a shared utility module.
+6. Add tests for nested calls, casts, strings, comma-containing expressions, and
+   malformed decompiler text.
+
+### Acceptance Criteria
+
+- Rule matching can gate on function call argument count and literal argument
+  values without ad hoc regex.
+- Existing v1 rule packs behave exactly as before.
+- Malformed pseudocode produces partial facts, not runtime crashes.
+
+## P2: Conservative Switch Body Reconstruction
+
+### Current Evidence
+
+- README and status docs both list full switch body reconstruction for shared
+  and fallthrough branches as pending.
+- `render_switch_outline()` intentionally expands only safe bodies and points
+  complex cases back to normalized original pseudocode.
+
+### Problem
+
+The current conservative output is safer than an overconfident fake switch, but
+large dispatcher review still requires too much manual correlation when many
+cases share labels, cleanup tails, or fallthrough-like paths.
+
+### Plan
+
+1. Represent recovered cases with explicit body states:
+   - `single_statement_body`
+   - `shared_tail`
+   - `fallthrough_or_join`
+   - `complex_unsliced`
+2. Add labels and source line anchors to the outline for non-expanded cases.
+3. Add a sidecar `flow-report.md` section mapping each case to labels and
+   branch anchors.
+4. Add a branch-slice helper that only extracts bodies when all exits and joins
+   are represented.
+5. Add regression samples for shared cleanup, goto-dependent paths, fallthrough,
+   and nested native switches.
+
+### Acceptance Criteria
+
+- Complex cases are easier to audit without pretending to be full switch bodies.
+- No output path loses the normalized original pseudocode.
+- Cases with shared tails are labeled as shared rather than expanded as unique
+  bodies.
+
+## P2: Test Suite Restructure
+
+### Current Evidence
+
+- `tests/test_core_engine.py` is about 5140 lines.
+- The status document already lists the historical monolith as deferred debt.
+- Test coverage is broad but organized mostly by accumulation rather than by
+  subsystem.
+
+### Problem
+
+The current test monolith makes focused review harder. It also increases merge
+conflict risk and makes it harder to identify which subsystem owns a regression.
+
+### Plan
+
+1. Split `test_core_engine.py` into domain suites:
+   - `test_plan_builder.py`
+   - `test_render_status.py`
+   - `test_render_dispatcher.py`
+   - `test_render_ioctl.py`
+   - `test_render_driver_entry.py`
+   - `test_render_callbacks.py`
+   - `test_validation.py`
+   - `test_deterministic_rules.py`
+   - `test_forge_store.py`
+2. Move shared fixtures into `tests/fixtures/` or `tests/helpers.py`.
+3. Add snapshot fixtures for rendered output.
+4. Keep `python -B -m unittest discover -s tests -v` as the canonical local
+   command.
+5. Make each split commit behavior-preserving.
+
+### Acceptance Criteria
+
+- Test count is preserved during split.
+- Domain-specific test files can be run independently.
+- Fixture duplication goes down.
+
+## P2: IDA UX And Long-Running Operation Improvements
+
+### Current Evidence
+
+- The simple custom viewer has preview size/highlight limits in
+  `ida_pseudoforge/ida/ui_preview.py`.
+- The status document defers full non-blocking LLM model discovery.
+- The README lists a richer dockable side-by-side preview panel as pending.
+
+### Problem
+
+PseudoForge targets large kernel functions. The current simple viewer is stable
+and intentionally low-risk, but large output review still needs better
+navigation, diffing, rule diagnostics, and long-running progress behavior.
+
+### Plan
+
+1. Keep `simplecustviewer_t` as the fallback path.
+2. Add a dockable side-by-side review panel behind a feature flag:
+   - raw pseudocode
+   - cleaned pseudocode
+   - synchronized line search
+   - warning/rule summary pane
+3. Add non-blocking model discovery:
+   - show cached/static models immediately
+   - refresh in background
+   - save only after successful user confirmation
+4. Add cancellation/progress hooks for long LLM and batch work where IDA APIs
+   allow it.
+5. Add rule load/validation warnings as concise Output messages with full
+   details in the rule report.
+
+### Acceptance Criteria
+
+- Existing viewer remains available and tested.
+- Dockable panel can be disabled by environment/config.
+- Model discovery failure never corrupts saved config.
+- Large previews still fall back to plain text safely.
+
+## P3: Real-Target Validation Continuation
+
+### Current Evidence
+
+- The status document records large-scale non-LLM and LLM ntoskrnl validation.
+- The next continuation point is after `0x14021A324 RtlSparseArrayElementAllocate`.
+
+### Problem
+
+The current validation history is strong, but it is manually curated and stored
+mostly as status text. Continuing real-target validation should produce
+machine-readable review artifacts and issue buckets so regressions become easier
+to compare across runs.
+
+### Plan
+
+1. Continue the next 72-function LLM batch from `StartEa: 0x14021A325`.
+2. Store review verdicts in a structured JSON/Markdown pair:
+   - `OK`
+   - `OK-WARN`
+   - `REVIEW`
+   - `FAIL`
+3. Add summarizer support for recurring warning classes and rendered-output
+   quality buckets.
+4. Convert accepted findings into focused regression tests before broad fixes.
+5. Track profile version, IDA version, model/provider, and command line in every
+   report.
+
+### Acceptance Criteria
+
+- Each broad validation run has a reproducible command and structured summary.
+- Every `FAIL` has either a linked regression test or a documented false alarm.
+- Batch summaries can compare status counts between two runs.
+
+## P3: Documentation And Release Hygiene
+
+### Current Evidence
+
+- README is comprehensive but very large.
+- The status document contains implementation notes, validation history, known
+  limits, deferred work, and next steps in one file.
+- Release packaging is tested and current release output is ignored by Git.
+
+### Problem
+
+Large docs are useful while moving quickly, but users and maintainers need
+separate surfaces: install/usage, developer architecture, validation history,
+rules authoring, and release process. Mixing all of these into README/status
+increases drift.
+
+### Plan
+
+1. Keep README as the user-facing entrypoint.
+2. Split detailed docs into `docs/`:
+   - `docs/architecture.md`
+   - `docs/rules.md`
+   - `docs/validation.md`
+   - `docs/release.md`
+   - `docs/ida-free.md`
+   - `docs/batch.md`
+3. Keep `pseudoforge_implementation_status.md` as a current status ledger, but
+   move historical validation tables into `docs/validation-history/`.
+4. Add a release checklist:
+   - version parity
+   - unit tests
+   - compileall
+   - JSON validation
+   - rules validation
+   - CLI smoke
+   - IDA Free smoke
+   - `git diff --check`
+5. Link this improvement plan from README after it stabilizes.
+
+### Acceptance Criteria
+
+- README stays shorter and easier to scan.
+- Historical validation evidence remains available.
+- Release commands are not duplicated inconsistently across docs.
+
+## Suggested Execution Order
+
+1. Add rename identity metadata and preflight hardening.
+2. Add snapshot testing infrastructure before renderer extraction.
+3. Extract renderer modules one family at a time.
+4. Add export parity shared writer.
+5. Split generated kernel profile and add manifest-aware loader.
+6. Add deterministic rules v2 `call_arg_rewrite`.
+7. Expand `RuleContext` facts and then add guarded `text_rewrite`.
+8. Improve switch reports before attempting deeper body reconstruction.
+9. Split `test_core_engine.py` after behavior is stabilized.
+10. Add dockable preview and non-blocking model discovery.
+
+## Current Validation Baseline To Preserve
+
+```powershell
+python -B -m unittest discover -s tests -v
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools
+python -B -m json.tool .\ida-plugin.json
+python -B -m json.tool .\ida_pseudoforge\profiles\kernel_api.json
+python -B -m json.tool .\ida_pseudoforge\profiles\kernel_api_overrides.json
+python -B -m json.tool .\ida_pseudoforge\profiles\status_codes.json
+python -B -m json.tool .\ida_pseudoforge\profiles\process_information_class.json
+python -B -m json.tool .\ida_pseudoforge\profiles\system_information_class.json
+python -B .\tools\validate_pseudoforge_rules.py .\ida_pseudoforge\rules\builtin
+python -B .\tools\build_kernel_api_profile.py --version 10.0.26100.0 --dry-run --summary --function ExAllocatePool2 --function ExAcquireResourceExclusiveLite
+python -B .\tools\build_status_codes_profile.py --version 10.0.26100.0 --dry-run --summary
+python -B .\tools\pseudoforge_cli.py --version
+python -B .\tools\release_pseudoforge.py --dry-run
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_smoke
+python -B .\tools\pseudoforge_free_cli.py --version
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_smoke
+git diff --check -- .
+```

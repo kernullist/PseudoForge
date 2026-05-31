@@ -57,6 +57,7 @@ python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation
 Key documentation:
 
 - [pseudoforge_implementation_status.md](pseudoforge_implementation_status.md): current implemented scope and validation history.
+- [pseudoforge_improvement_plan.md](pseudoforge_improvement_plan.md): prioritized improvement backlog from the current code and documentation review.
 - [ida_pseudocode_refactor_plugin_design.md](ida_pseudocode_refactor_plugin_design.md): overall product and architecture design.
 - [deterministic_rules_matching_engine_design.md](deterministic_rules_matching_engine_design.md): deterministic JSON rule engine design.
 - [samples/kernel_pattern_driver/README.md](samples/kernel_pattern_driver/README.md): WDK sample corpus for kernel-pattern analysis.
@@ -1370,6 +1371,7 @@ Rename application fails:
 - [ida_pseudocode_refactor_plugin_design.md](ida_pseudocode_refactor_plugin_design.md)
 - [deterministic_rules_matching_engine_design.md](deterministic_rules_matching_engine_design.md)
 - [pseudoforge_implementation_status.md](pseudoforge_implementation_status.md)
+- [pseudoforge_improvement_plan.md](pseudoforge_improvement_plan.md)
 
 ## Next Work
 
