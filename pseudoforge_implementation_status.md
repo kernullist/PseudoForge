@@ -208,6 +208,7 @@ Implemented in this folder:
    - `tests/test_profile_loader.py`
    - `tests/test_export_bundle.py`
    - `tests/test_ida_batch.py`
+   - `tests/test_llm_config.py`
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
@@ -412,6 +413,8 @@ P2 switch body reporting update:
   live in `tests/test_rule_integration.py`.
 - IDA batch report summary, optional-LLM fallback, compare artifact, and
   Windows-safe file-stem regressions now live in `tests/test_ida_batch.py`.
+- LLM config, provider registry, response parsing, CLI stdout, and
+  command-template migration regressions now live in `tests/test_llm_config.py`.
 
 P0 rename identity hardening update:
 
@@ -728,7 +731,7 @@ python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInform
 Warning renderer extraction validation:
 
 ```text
-python -B -m unittest tests.test_render_warnings tests.test_render_snapshots tests.test_export_bundle tests.test_core_engine.CoreEngineTests.test_irp_completion_label_and_resolved_ioctl_warnings_are_display_clean tests.test_core_engine.CoreEngineTests.test_large_dispatcher_llm_raises_confidence_floor_and_hides_low_confidence_warnings -v: 9 tests OK
+python -B -m unittest tests.test_render_warnings tests.test_render_snapshots tests.test_export_bundle tests.test_core_engine.CoreEngineTests.test_irp_completion_label_and_resolved_ioctl_warnings_are_display_clean tests.test_llm_config.LlmConfigTests.test_large_dispatcher_llm_raises_confidence_floor_and_hides_low_confidence_warnings -v: 9 tests OK
 python -B -m unittest discover -s tests -v: 240 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 git diff --check -- .: passed
@@ -794,7 +797,7 @@ python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInform
 Header renderer extraction validation:
 
 ```text
-python -B -m unittest tests.test_render_header tests.test_render_snapshots tests.test_core_engine.CoreEngineTests.test_rendered_comment_text_is_ascii_safe tests.test_core_engine.CoreEngineTests.test_kernel_driver_semantics -v: 5 tests OK
+python -B -m unittest tests.test_render_header tests.test_render_snapshots tests.test_llm_config.LlmConfigTests.test_rendered_comment_text_is_ascii_safe tests.test_core_engine.CoreEngineTests.test_kernel_driver_semantics -v: 5 tests OK
 python -B -m unittest discover -s tests -v: 256 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 git diff --check -- .: passed
