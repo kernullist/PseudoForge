@@ -155,6 +155,9 @@ Completed:
 - [x] Moved DriverEntry rendering for canonical signature output, status
   normalization, IRP major constants, device flags, and `IoCreateDevice`
   secure-open rendering into a scoped `render_driver_entry` module.
+- [x] Moved callback rendering for OB pre-operation signatures, callback
+  registration toggle body cleanup, and registry callback status checks into a
+  scoped `render_callbacks` module.
 
 Remaining:
 
@@ -166,8 +169,8 @@ Remaining:
 ### Current Evidence
 
 - `ida_pseudoforge/core/render.py` is the largest production module at roughly
-  1240 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
-  and DriverEntry extraction slices.
+  1350 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
+  DriverEntry, and callback extraction slices.
 - `render_cleaned_pseudocode()` still coordinates many ordered text passes in
   `ida_pseudoforge/core/render.py`.
 - `ida_pseudoforge/core/render.py` preserves the public `write_export_bundle`
@@ -180,8 +183,11 @@ Remaining:
   and semantic label rendering now lives in
   `ida_pseudoforge/core/render_labels.py`.
 - DriverEntry rendering now lives in
-  `ida_pseudoforge/core/render_driver_entry.py`, while callback rewrites remain
-  in `render.py`.
+  `ida_pseudoforge/core/render_driver_entry.py`.
+- Callback rendering now lives in
+  `ida_pseudoforge/core/render_callbacks.py`, while warning-display filters,
+  IRP dispatch body cleanup, Zw/API probe cleanup, and
+  `NtSetSystemInformation` body cleanup remain in `render.py`.
 
 ### Problem
 

@@ -171,6 +171,7 @@ Implemented in this folder:
 6. Tests
    - `tests/test_core_engine.py`
    - `tests/test_ida_plugin_safety.py`
+   - `tests/test_render_callbacks.py`
    - `tests/test_render_dispatcher.py`
    - `tests/test_render_driver_entry.py`
    - `tests/test_render_ioctl.py`
@@ -182,7 +183,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 225 unit tests
+   - current suite covers 228 unit tests
 
 ## Latest Implementation Notes
 
@@ -216,6 +217,9 @@ P1 renderer snapshot protection update:
 - DriverEntry rendering for canonical signature output, status normalization,
   IRP major constants, device flags, and `IoCreateDevice` secure-open rendering
   now lives in `ida_pseudoforge/core/render_driver_entry.py`.
+- Callback rendering for OB pre-operation signatures, callback registration
+  toggle body cleanup, and Configuration Manager callback registration status
+  checks now lives in `ida_pseudoforge/core/render_callbacks.py`.
 
 P1 profile loader diagnostics update:
 
@@ -571,6 +575,17 @@ build: .\samples\kernel_pattern_driver\tools\build.ps1 -Configuration Debug
 result: PfKernelPattern.sys and PfKernelPatternTool.exe built successfully for Release|x64 and Debug|x64
 signing: WDK TestSign reported "Successfully signed" for both PfKernelPattern.sys outputs
 live load: not run
+```
+
+Callback renderer extraction validation:
+
+```text
+python -B -m unittest tests.test_render_callbacks tests.test_render_snapshots tests.test_core_engine.CoreEngineTests.test_callback_registration_toggle_rewrites_ob_operation_registration tests.test_core_engine.CoreEngineTests.test_packed_callback_registration_rewrites_ob_operation_registration tests.test_core_engine.CoreEngineTests.test_registry_callback_registration_probe_gets_cm_semantics tests.test_core_engine.CoreEngineTests.test_ob_pre_operation_no_symbol_typed_offset_loads_are_rewritten tests.test_core_engine.CoreEngineTests.test_ob_pre_operation_raw_field_loads_are_rewritten -v: 9 tests OK
+python -B -m unittest discover -s tests -v: 228 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_callback_extract_smoke: succeeded
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_callback_extract_smoke --format json --no-progress: succeeded
 ```
 
 DriverEntry cleanup regression validation:
