@@ -287,8 +287,12 @@ P1 profile loader diagnostics update:
   counts, and SHA-256 metadata.
 - Export summaries report manifest metadata for profiles loaded during the
   current run.
+- Kernel API runtime lookups now use split family loader APIs for functions,
+  enums, indices, and symbols when those files are present, with monolithic
+  `kernel_api.json` fallback for the current built-in profile.
 - `tests/test_profile_loader.py` covers invalid JSON warning recording and cache
-  reset behavior plus active profile manifest reporting.
+  reset behavior plus active profile manifest reporting and split-family loader
+  fallback behavior.
 
 P1 export artifact parity update:
 

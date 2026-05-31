@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ida_pseudoforge.profiles.loader import load_json_profile
+from ida_pseudoforge.profiles.loader import load_json_profile, load_kernel_api_family
 
 
 _CUSTOM_FLAG_ENUMS: dict[str, dict[str, str]] = {
@@ -40,8 +40,7 @@ class _ResolvedIndirectCall:
 
 
 def lookup_kernel_symbol(name: str) -> list[dict[str, Any]]:
-    profile = _kernel_api_profile()
-    symbols = profile.get("symbols", {})
+    symbols = _kernel_symbols()
     if not isinstance(symbols, dict):
         return []
     entries = symbols.get(name, [])
@@ -50,7 +49,7 @@ def lookup_kernel_symbol(name: str) -> list[dict[str, Any]]:
     result = [entry for entry in entries if isinstance(entry, dict)]
     if result:
         return result
-    functions = _kernel_functions(profile)
+    functions = _kernel_functions()
     alias = _resolve_function_alias(name, functions)
     if alias is None:
         return []
@@ -70,16 +69,15 @@ def lookup_kernel_symbol(name: str) -> list[dict[str, Any]]:
 
 
 def kernel_function_metadata(name: str) -> dict[str, Any]:
-    profile = _kernel_api_profile()
-    return _function_metadata_for_name(_kernel_functions(profile), name)
+    return _function_metadata_for_name(_kernel_functions(), name)
 
 
 def apply_kernel_api_rewrites(text: str) -> str:
-    profile = _kernel_api_profile()
-    functions = profile.get("functions", {})
+    functions = _kernel_functions()
     if not isinstance(functions, dict) or not functions:
         return text
 
+    profile = _kernel_api_rewrite_profile(functions)
     result = text
     rewrite_names = _rewrite_function_names(profile, functions, result)
     for function_name in rewrite_names:
@@ -125,8 +123,16 @@ def decode_pool_tag_literal(literal: str) -> str:
 
 
 def _kernel_api_profile() -> dict[str, Any]:
-    data = load_json_profile("kernel_api.json")
-    return data if isinstance(data, dict) else {}
+    profile = {
+        "functions": _kernel_functions(),
+        "enums": _kernel_enums(),
+        "structures": _kernel_structures(),
+        "aliases": _kernel_aliases(),
+        "macros": _kernel_macros(),
+        "symbols": _kernel_symbols(),
+        "indices": _kernel_indices(),
+    }
+    return profile if any(profile.values()) else {}
 
 
 def _kernel_api_overrides() -> dict[str, Any]:
@@ -134,9 +140,47 @@ def _kernel_api_overrides() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _kernel_functions(profile: dict[str, Any]) -> dict[str, Any]:
-    functions = profile.get("functions", {})
+def _kernel_api_rewrite_profile(functions: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "functions": functions,
+        "enums": _kernel_enums(),
+        "indices": _kernel_indices(),
+    }
+
+
+def _kernel_functions(profile: dict[str, Any] | None = None) -> dict[str, Any]:
+    functions = load_kernel_api_family("functions") if profile is None else profile.get("functions", {})
     return functions if isinstance(functions, dict) else {}
+
+
+def _kernel_enums() -> dict[str, Any]:
+    enums = load_kernel_api_family("enums")
+    return enums if isinstance(enums, dict) else {}
+
+
+def _kernel_structures() -> dict[str, Any]:
+    structures = load_kernel_api_family("structures")
+    return structures if isinstance(structures, dict) else {}
+
+
+def _kernel_aliases() -> dict[str, Any]:
+    aliases = load_kernel_api_family("aliases")
+    return aliases if isinstance(aliases, dict) else {}
+
+
+def _kernel_macros() -> dict[str, Any]:
+    macros = load_kernel_api_family("macros")
+    return macros if isinstance(macros, dict) else {}
+
+
+def _kernel_symbols() -> dict[str, Any]:
+    symbols = load_kernel_api_family("symbols")
+    return symbols if isinstance(symbols, dict) else {}
+
+
+def _kernel_indices() -> dict[str, Any]:
+    indices = load_kernel_api_family("indices")
+    return indices if isinstance(indices, dict) else {}
 
 
 def _function_metadata_for_name(functions: dict[str, Any], name: str) -> dict[str, Any]:

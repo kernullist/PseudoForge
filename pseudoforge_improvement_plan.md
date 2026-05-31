@@ -300,11 +300,12 @@ Completed:
 - [x] Added focused loader coverage for invalid JSON profile diagnostics.
 - [x] Added profile manifest metadata and active profile reporting in export
   summaries.
+- [x] Added lookup-family kernel API loader paths for split functions, enums,
+  indices, and symbols with monolithic profile fallback.
 
 Remaining:
 
 - [ ] Split generated kernel API profile output into smaller artifacts.
-- [ ] Add lookup-family loader APIs that avoid loading the full kernel profile.
 - [ ] Add optional target-build profile selection.
 - [ ] Add cold-load and repeated-lookup performance smoke checks.
 
@@ -313,8 +314,9 @@ Remaining:
 - `ida_pseudoforge/profiles/kernel_api.json` is about 44 MB.
 - `ida_pseudoforge/profiles/loader.py:13` loads JSON profiles through an
   unbounded `lru_cache`.
-- `ida_pseudoforge/core/kernel_api.py:127` loads the full kernel API profile for
-  symbol and function metadata lookup.
+- `ida_pseudoforge/core/kernel_api.py` uses lookup-family loader paths for
+  function, enum, index, and symbol access, with monolithic fallback while the
+  built-in generated profile remains unsplit.
 - The implementation status records a single WDK 10.0.26100.0-generated profile
   as the current broad profile.
 
@@ -335,6 +337,7 @@ keeps analysis alive but can hide profile corruption.
    - `kernel_aliases.json`
    - `kernel_macros.json`
    - `kernel_symbol_index.json`
+   - `kernel_indices.json`
    - `profile_manifest.json`
 2. Add loader APIs for specific lookup families instead of loading the whole
    profile for every path.

@@ -8,6 +8,16 @@ from pathlib import Path
 
 PROFILE_DIR = Path(__file__).resolve().parent
 PROFILE_MANIFEST_NAME = "profiles_manifest.json"
+KERNEL_API_PROFILE_NAME = "kernel_api.json"
+KERNEL_API_FAMILY_FILES = {
+    "functions": "kernel_functions.json",
+    "enums": "kernel_enums.json",
+    "structures": "kernel_structures.json",
+    "aliases": "kernel_aliases.json",
+    "macros": "kernel_macros.json",
+    "symbols": "kernel_symbol_index.json",
+    "indices": "kernel_indices.json",
+}
 _PROFILE_LOAD_WARNINGS: dict[str, str] = {}
 _ACTIVE_PROFILE_NAMES: set[str] = set()
 
@@ -44,6 +54,33 @@ def load_profile(name: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in data.items()}
 
 
+@lru_cache(maxsize=None)
+def load_kernel_api_family(family: str) -> dict[str, Any]:
+    family_name = str(family or "").strip()
+    if not family_name:
+        return {}
+
+    split_name = KERNEL_API_FAMILY_FILES.get(family_name)
+    if split_name and (PROFILE_DIR / split_name).exists():
+        return _load_kernel_api_family_file(split_name, family_name)
+
+    data = load_json_profile(KERNEL_API_PROFILE_NAME)
+    if not isinstance(data, dict):
+        _record_profile_warning(
+            KERNEL_API_PROFILE_NAME,
+            "kernel API profile root must be a JSON object, got %s" % type(data).__name__,
+        )
+        return {}
+    family_data = data.get(family_name, {})
+    if not isinstance(family_data, dict):
+        _record_profile_warning(
+            KERNEL_API_PROFILE_NAME,
+            "kernel API family %s must be a JSON object, got %s" % (family_name, type(family_data).__name__),
+        )
+        return {}
+    return family_data
+
+
 def profile_load_warnings() -> list[str]:
     return [_PROFILE_LOAD_WARNINGS[name] for name in sorted(_PROFILE_LOAD_WARNINGS)]
 
@@ -70,6 +107,7 @@ def profile_manifest(name: str) -> dict[str, Any]:
 def clear_profile_caches() -> None:
     load_json_profile.cache_clear()
     load_profile.cache_clear()
+    load_kernel_api_family.cache_clear()
     load_profiles_manifest.cache_clear()
     get_system_information_class_value.cache_clear()
     get_process_information_class_value.cache_clear()
@@ -110,6 +148,23 @@ def _profiles_manifest_entries() -> dict[str, Any]:
     manifest = load_profiles_manifest()
     profiles = manifest.get("profiles", {}) if isinstance(manifest, dict) else {}
     return profiles if isinstance(profiles, dict) else {}
+
+
+def _load_kernel_api_family_file(name: str, family: str) -> dict[str, Any]:
+    data = load_json_profile(name)
+    if not isinstance(data, dict):
+        _record_profile_warning(name, "profile root must be a JSON object, got %s" % type(data).__name__)
+        return {}
+    if family in data:
+        nested = data.get(family)
+        if isinstance(nested, dict):
+            return nested
+        _record_profile_warning(
+            name,
+            "kernel API family %s must be a JSON object, got %s" % (family, type(nested).__name__),
+        )
+        return {}
+    return data
 
 
 def _record_profile_warning(name: str, message: str) -> None:

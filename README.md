@@ -534,7 +534,7 @@ samples\kernel_pattern_driver\x64\Release\PfKernelPatternTool.exe
 
 ## WDK Kernel API Profile
 
-PseudoForge reads `ida_pseudoforge/profiles/kernel_api.json` by default for WDK API prototypes and selected argument semantics. `kernel_api_overrides.json` adds private wrapper aliases and deterministic argument semantics that do not exist directly in WDK headers.
+PseudoForge reads `ida_pseudoforge/profiles/kernel_api.json` by default for WDK API prototypes and selected argument semantics. Runtime lookup paths can also use split family files when they are present, such as `kernel_functions.json`, `kernel_enums.json`, `kernel_indices.json`, and `kernel_symbol_index.json`, before falling back to the monolithic profile. `kernel_api_overrides.json` adds private wrapper aliases and deterministic argument semantics that do not exist directly in WDK headers.
 
 Regenerate the profile from WDK headers:
 
