@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import unittest
 
 from ida_pseudoforge.core.capture import capture_from_pseudocode
 from ida_pseudoforge.core.forge_store import render_forge_function_section
 from ida_pseudoforge.core.lvar_analysis import build_clean_plan
 from ida_pseudoforge.core.render import render_cleaned_pseudocode
+from tests.llm_test_helpers import JsonRenameProvider
 
 
 BAD_INVARIANT_RENAME_SAMPLE = r"""
@@ -89,29 +89,26 @@ __int64 __fastcall PointerBoundRenameSample(void *a1, unsigned __int16 a2)
 
 class LlmRenameFilterTests(unittest.TestCase):
     def test_llm_invariant_names_are_rejected_when_values_change(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "v7",
-                                "new": "booleanTrue",
-                                "confidence": 0.90,
-                                "reason": "initialized to one",
-                            },
-                            {
-                                "old": "v8",
-                                "new": "one",
-                                "confidence": 0.90,
-                                "reason": "initialized to one",
-                            },
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(BAD_INVARIANT_RENAME_SAMPLE)
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "v7",
+                        "new": "booleanTrue",
+                        "confidence": 0.90,
+                        "reason": "initialized to one",
+                    },
+                    {
+                        "old": "v8",
+                        "new": "one",
+                        "confidence": 0.90,
+                        "reason": "initialized to one",
+                    },
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
 
@@ -124,71 +121,68 @@ class LlmRenameFilterTests(unittest.TestCase):
         self.assertNotIn("LOBYTE(one)", rendered)
 
     def test_weak_llm_context_names_are_rejected_in_large_dispatchers(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "Buf1",
-                                "new": "capturedUnicodeString",
-                                "confidence": 0.90,
-                                "reason": "temporary captured unicode string",
-                            },
-                            {
-                                "old": "Src",
-                                "new": "capturedUnicodeStringBuffer",
-                                "confidence": 0.90,
-                                "reason": "temporary captured unicode string buffer",
-                            },
-                            {
-                                "old": "v118",
-                                "new": "flagsScratch",
-                                "confidence": 0.90,
-                                "reason": "temporary flags",
-                            },
-                            {
-                                "old": "v126",
-                                "new": "scratchFlags",
-                                "confidence": 0.90,
-                                "reason": "temporary flags",
-                            },
-                            {
-                                "old": "result",
-                                "new": "statusResult",
-                                "confidence": 0.90,
-                                "reason": "status returned by helper calls",
-                            },
-                            {
-                                "old": "v38",
-                                "new": "verifierStatus",
-                                "confidence": 0.90,
-                                "reason": "verifier helper status",
-                            },
-                            {
-                                "old": "v113",
-                                "new": "difVerificationOperation",
-                                "confidence": 0.90,
-                                "reason": "operation selector",
-                            },
-                            {
-                                "old": "v138",
-                                "new": "inputHandle",
-                                "confidence": 0.90,
-                                "reason": "input handle",
-                            },
-                            {
-                                "old": "v146",
-                                "new": "targetHandle",
-                                "confidence": 0.90,
-                                "reason": "target handle",
-                            },
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(WEAK_LLM_DISPATCHER_SAMPLE)
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "Buf1",
+                        "new": "capturedUnicodeString",
+                        "confidence": 0.90,
+                        "reason": "temporary captured unicode string",
+                    },
+                    {
+                        "old": "Src",
+                        "new": "capturedUnicodeStringBuffer",
+                        "confidence": 0.90,
+                        "reason": "temporary captured unicode string buffer",
+                    },
+                    {
+                        "old": "v118",
+                        "new": "flagsScratch",
+                        "confidence": 0.90,
+                        "reason": "temporary flags",
+                    },
+                    {
+                        "old": "v126",
+                        "new": "scratchFlags",
+                        "confidence": 0.90,
+                        "reason": "temporary flags",
+                    },
+                    {
+                        "old": "result",
+                        "new": "statusResult",
+                        "confidence": 0.90,
+                        "reason": "status returned by helper calls",
+                    },
+                    {
+                        "old": "v38",
+                        "new": "verifierStatus",
+                        "confidence": 0.90,
+                        "reason": "verifier helper status",
+                    },
+                    {
+                        "old": "v113",
+                        "new": "difVerificationOperation",
+                        "confidence": 0.90,
+                        "reason": "operation selector",
+                    },
+                    {
+                        "old": "v138",
+                        "new": "inputHandle",
+                        "confidence": 0.90,
+                        "reason": "input handle",
+                    },
+                    {
+                        "old": "v146",
+                        "new": "targetHandle",
+                        "confidence": 0.90,
+                        "reason": "target handle",
+                    },
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
         normalized_body = rendered.split("PseudoForge normalized original pseudocode.", 1)[-1]
@@ -237,25 +231,6 @@ class LlmRenameFilterTests(unittest.TestCase):
         self.assertIn("    Warnings: 0", section)
 
     def test_shadowed_llm_skip_warning_is_removed_when_stronger_rename_wins(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "DriverServiceName",
-                                "new": "driverServiceName",
-                                "confidence": 0.90,
-                                "reason": "driver service name",
-                            }
-                        ],
-                        "warnings": [
-                            "Skipped reused dispatcher rename DriverServiceName->driverServiceName",
-                            "Skipped reused dispatcher rename Process->process",
-                        ],
-                    }
-                )
-
         capture = capture_from_pseudocode(
             WEAK_LLM_DISPATCHER_SAMPLE.replace(
                 "int v5;\n",
@@ -268,7 +243,23 @@ class LlmRenameFilterTests(unittest.TestCase):
                 "HANDLE v146;\n  UNICODE_STRING DriverServiceName;",
             )
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "DriverServiceName",
+                        "new": "driverServiceName",
+                        "confidence": 0.90,
+                        "reason": "driver service name",
+                    }
+                ],
+                "warnings": [
+                    "Skipped reused dispatcher rename DriverServiceName->driverServiceName",
+                    "Skipped reused dispatcher rename Process->process",
+                ],
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
 
         self.assertEqual(rename_map["DriverServiceName"], "driverServiceName")
@@ -278,23 +269,20 @@ class LlmRenameFilterTests(unittest.TestCase):
         self.assertNotIn("Skipped reused dispatcher rename Process->process", plan.warnings)
 
     def test_pointer_bound_llm_rename_is_rejected(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "v93",
-                                "new": "destinationBuffer",
-                                "confidence": 0.90,
-                                "reason": "computed destination buffer",
-                            }
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(POINTER_BOUND_RENAME_SAMPLE)
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "v93",
+                        "new": "destinationBuffer",
+                        "confidence": 0.90,
+                        "reason": "computed destination buffer",
+                    }
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
         body = rendered.rsplit("*/", 1)[-1]
@@ -305,39 +293,6 @@ class LlmRenameFilterTests(unittest.TestCase):
         self.assertNotIn("destinationBuffer", body)
 
     def test_pascalcase_llm_local_renames_are_rejected(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "a1",
-                                "new": "Subsection",
-                                "confidence": 0.96,
-                                "reason": "inferred structure role",
-                            },
-                            {
-                                "old": "v3",
-                                "new": "ControlArea",
-                                "confidence": 0.96,
-                                "reason": "inferred from offset use",
-                            },
-                            {
-                                "old": "v5",
-                                "new": "ControlAreaFlags",
-                                "confidence": 0.92,
-                                "reason": "flags field value",
-                            },
-                            {
-                                "old": "v7",
-                                "new": "subsectionBase",
-                                "confidence": 0.90,
-                                "reason": "lower camel local name",
-                            },
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(
             """
 __int64 __fastcall PascalCaseKernelSample(__int64 *a1)
@@ -354,7 +309,37 @@ __int64 __fastcall PascalCaseKernelSample(__int64 *a1)
 }
 """
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "a1",
+                        "new": "Subsection",
+                        "confidence": 0.96,
+                        "reason": "inferred structure role",
+                    },
+                    {
+                        "old": "v3",
+                        "new": "ControlArea",
+                        "confidence": 0.96,
+                        "reason": "inferred from offset use",
+                    },
+                    {
+                        "old": "v5",
+                        "new": "ControlAreaFlags",
+                        "confidence": 0.92,
+                        "reason": "flags field value",
+                    },
+                    {
+                        "old": "v7",
+                        "new": "subsectionBase",
+                        "confidence": 0.90,
+                        "reason": "lower camel local name",
+                    },
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
 
         self.assertNotIn("a1", rename_map)
@@ -366,10 +351,6 @@ __int64 __fastcall PascalCaseKernelSample(__int64 *a1)
         self.assertIn("Skipped PascalCase LLM rename v5->ControlAreaFlags", plan.warnings)
 
     def test_llm_path_suppresses_generic_prototype_argument_renames(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return '{"renames":[]}'
-
         capture = capture_from_pseudocode(
             """
 __int64 __fastcall GenericArgumentSample(__int64 a1, int a2)
@@ -382,7 +363,7 @@ __int64 __fastcall GenericArgumentSample(__int64 a1, int a2)
 }
 """
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        plan = build_clean_plan(capture, rename_provider=JsonRenameProvider('{"renames":[]}'))
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
 
@@ -392,21 +373,6 @@ __int64 __fastcall GenericArgumentSample(__int64 a1, int a2)
         self.assertNotIn("argument0", rendered)
 
     def test_generic_llm_argument_rename_is_rejected(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "a1",
-                                "new": "argument0",
-                                "confidence": 0.95,
-                                "reason": "generic LLM placeholder",
-                            }
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(
             """
 __int64 __fastcall GenericArgumentSample(__int64 a1)
@@ -415,7 +381,19 @@ __int64 __fastcall GenericArgumentSample(__int64 a1)
 }
 """
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "a1",
+                        "new": "argument0",
+                        "confidence": 0.95,
+                        "reason": "generic LLM placeholder",
+                    }
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
         body = rendered.rsplit("*/", 1)[-1]
@@ -425,21 +403,6 @@ __int64 __fastcall GenericArgumentSample(__int64 a1)
         self.assertNotIn("argument0", body)
 
     def test_weak_llm_argument_rename_is_rejected(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "a4",
-                                "new": "alignmentPages",
-                                "confidence": 0.72,
-                                "reason": "uncertain forwarded argument role",
-                            }
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(
             """
 unsigned __int64 __fastcall WeakArgumentSample(__int64 a1, int a2, int a3, unsigned int a4)
@@ -448,7 +411,19 @@ unsigned __int64 __fastcall WeakArgumentSample(__int64 a1, int a2, int a3, unsig
 }
 """
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "a4",
+                        "new": "alignmentPages",
+                        "confidence": 0.72,
+                        "reason": "uncertain forwarded argument role",
+                    }
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
         body = rendered.rsplit("*/", 1)[-1]
@@ -458,27 +433,6 @@ unsigned __int64 __fastcall WeakArgumentSample(__int64 a1, int a2, int a3, unsig
         self.assertNotIn("alignmentPages", body)
 
     def test_saved_argument_copy_rename_requires_supported_argument_name(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "a4",
-                                "new": "allocationFlags",
-                                "confidence": 0.62,
-                                "reason": "uncertain forwarded flag role",
-                            },
-                            {
-                                "old": "v29",
-                                "new": "savedAllocationFlags",
-                                "confidence": 0.91,
-                                "reason": "saved copy of a4",
-                            },
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(
             """
 unsigned __int64 __fastcall SavedArgumentCopySample(__int64 a1, int a2, int a3, unsigned int a4)
@@ -490,7 +444,25 @@ unsigned __int64 __fastcall SavedArgumentCopySample(__int64 a1, int a2, int a3, 
 }
 """
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "a4",
+                        "new": "allocationFlags",
+                        "confidence": 0.62,
+                        "reason": "uncertain forwarded flag role",
+                    },
+                    {
+                        "old": "v29",
+                        "new": "savedAllocationFlags",
+                        "confidence": 0.91,
+                        "reason": "saved copy of a4",
+                    },
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
         body = rendered.rsplit("*/", 1)[-1]
@@ -502,27 +474,6 @@ unsigned __int64 __fastcall SavedArgumentCopySample(__int64 a1, int a2, int a3, 
         self.assertNotIn("savedAllocationFlags", body)
 
     def test_saved_argument_copy_rename_is_allowed_when_argument_name_is_supported(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "a4",
-                                "new": "allocationFlags",
-                                "confidence": 0.90,
-                                "reason": "forwarded flag role",
-                            },
-                            {
-                                "old": "v29",
-                                "new": "savedAllocationFlags",
-                                "confidence": 0.91,
-                                "reason": "saved copy of a4",
-                            },
-                        ]
-                    }
-                )
-
         capture = capture_from_pseudocode(
             """
 unsigned __int64 __fastcall SavedArgumentCopySample(__int64 a1, int a2, int a3, unsigned int a4)
@@ -534,31 +485,46 @@ unsigned __int64 __fastcall SavedArgumentCopySample(__int64 a1, int a2, int a3, 
 }
 """
         )
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "a4",
+                        "new": "allocationFlags",
+                        "confidence": 0.90,
+                        "reason": "forwarded flag role",
+                    },
+                    {
+                        "old": "v29",
+                        "new": "savedAllocationFlags",
+                        "confidence": 0.91,
+                        "reason": "saved copy of a4",
+                    },
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
 
         self.assertEqual(rename_map["a4"], "allocationFlags")
         self.assertEqual(rename_map["v29"], "savedAllocationFlags")
 
     def test_numeric_dispatcher_llm_rename_is_rejected(self) -> None:
-        class FakeProvider:
-            def suggest_renames(self, capture):
-                return json.dumps(
-                    {
-                        "renames": [
-                            {
-                                "old": "v115",
-                                "new": "classMinus235",
-                                "confidence": 0.90,
-                                "reason": "derived from dispatcher class delta",
-                            }
-                        ]
-                    }
-                )
-
         sample = WEAK_LLM_DISPATCHER_SAMPLE.replace("  int v113;\n", "  int v113;\n  int v115;\n")
         capture = capture_from_pseudocode(sample)
-        plan = build_clean_plan(capture, rename_provider=FakeProvider())
+        provider = JsonRenameProvider(
+            {
+                "renames": [
+                    {
+                        "old": "v115",
+                        "new": "classMinus235",
+                        "confidence": 0.90,
+                        "reason": "derived from dispatcher class delta",
+                    }
+                ]
+            }
+        )
+        plan = build_clean_plan(capture, rename_provider=provider)
         rename_map = {item.old: item.new for item in plan.renames if item.apply}
         rendered = render_cleaned_pseudocode(capture, plan)
 

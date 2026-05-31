@@ -284,6 +284,8 @@ P1 renderer snapshot protection update:
   in `tests/test_rename_heuristics.py`.
 - LLM rename filtering regressions now live in
   `tests/test_llm_rename_filters.py`.
+- Repeated JSON rename-provider fixtures for the LLM rename-filter suite now
+  live in `tests/llm_test_helpers.py`.
 - Plan-builder semantic recovery and shadowed duplicate-target warning
   regressions now live in `tests/test_plan_builder.py`.
 - The final broad render smoke coverage moved into `tests/test_render_ntset.py`

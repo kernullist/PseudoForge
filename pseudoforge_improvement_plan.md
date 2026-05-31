@@ -768,6 +768,9 @@ Completed:
 - [x] Moved final broad render smoke coverage into `tests/test_render_ntset.py`
   and `tests/test_render_flow.py`, then removed `tests/test_core_engine.py`.
 - [x] Kept the full suite stable at 268 tests across the final monolith split.
+- [x] Added `tests/llm_test_helpers.py` and moved
+  `tests/test_llm_rename_filters.py` JSON rename-provider fixtures onto the
+  shared helper.
 
 Remaining:
 
@@ -840,7 +843,8 @@ Remaining:
 - Deterministic rename heuristic and cfunc/text lvar merge coverage now lives in
   `tests/test_rename_heuristics.py`.
 - LLM rename filtering coverage now lives in
-  `tests/test_llm_rename_filters.py`.
+  `tests/test_llm_rename_filters.py`, with repeated JSON rename-provider
+  fixtures centralized in `tests/llm_test_helpers.py`.
 - Plan-builder semantic recovery and shadowed duplicate-target warning coverage
   now lives in `tests/test_plan_builder.py`.
 - The final broad NtSet render smoke coverage now lives in
