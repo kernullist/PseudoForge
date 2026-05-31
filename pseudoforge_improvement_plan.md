@@ -167,6 +167,8 @@ Completed:
 - [x] Moved `NtSetSystemInformation` m128/body rendering for typed
   `systemInformation` access, mutable alias splitting, and `userProbeEnd`
   recovery into a scoped `render_ntset` module.
+- [x] Moved warning formatting, ranking, and display-only suppression filters
+  into a scoped `render_warnings` module while preserving public render imports.
 
 Remaining:
 
@@ -178,8 +180,9 @@ Remaining:
 ### Current Evidence
 
 - `ida_pseudoforge/core/render.py` is the largest production module at roughly
-  980 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
-  DriverEntry, callback, IRP dispatch, Zw API, and NtSet extraction slices.
+  770 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
+  DriverEntry, callback, IRP dispatch, Zw API, NtSet, and warning-display
+  extraction slices.
 - `render_cleaned_pseudocode()` still coordinates many ordered text passes in
   `ida_pseudoforge/core/render.py`.
 - `ida_pseudoforge/core/render.py` preserves the public `write_export_bundle`
@@ -197,8 +200,8 @@ Remaining:
   `ida_pseudoforge/core/render_callbacks.py`.
 - Zw API probe rendering now lives in `ida_pseudoforge/core/render_zw.py`,
   and `NtSetSystemInformation` body rendering now lives in
-  `ida_pseudoforge/core/render_ntset.py`, while warning-display filters remain
-  in `render.py`.
+  `ida_pseudoforge/core/render_ntset.py`; warning formatting/ranking/filtering
+  now lives in `ida_pseudoforge/core/render_warnings.py`.
 
 ### Problem
 

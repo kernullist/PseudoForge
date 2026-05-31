@@ -179,13 +179,14 @@ Implemented in this folder:
    - `tests/test_render_ntset.py`
    - `tests/test_render_snapshots.py`
    - `tests/test_render_style.py`
+   - `tests/test_render_warnings.py`
    - `tests/test_render_zw.py`
    - `tests/test_profile_loader.py`
    - `tests/test_export_bundle.py`
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 237 unit tests
+   - current suite covers 240 unit tests
 
 ## Latest Implementation Notes
 
@@ -229,6 +230,9 @@ P1 renderer snapshot protection update:
 - `NtSetSystemInformation` m128/body rendering for typed `systemInformation`
   access, mutable alias splitting, and `userProbeEnd` recovery now lives in
   `ida_pseudoforge/core/render_ntset.py`.
+- Warning formatting, warning ranking, and display-only suppression filters now
+  live in `ida_pseudoforge/core/render_warnings.py` while preserving the public
+  `ida_pseudoforge.core.render.display_warning_count` import path.
 
 P1 profile loader diagnostics update:
 
@@ -628,6 +632,17 @@ python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: pass
 git diff --check -- .: passed
 python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_ntset_extract_smoke: succeeded
 python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_ntset_extract_smoke --format json --no-progress: succeeded
+```
+
+Warning renderer extraction validation:
+
+```text
+python -B -m unittest tests.test_render_warnings tests.test_render_snapshots tests.test_export_bundle tests.test_core_engine.CoreEngineTests.test_irp_completion_label_and_resolved_ioctl_warnings_are_display_clean tests.test_core_engine.CoreEngineTests.test_large_dispatcher_llm_raises_confidence_floor_and_hides_low_confidence_warnings -v: 9 tests OK
+python -B -m unittest discover -s tests -v: 240 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_warnings_extract_smoke: succeeded
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_warnings_extract_smoke --format json --no-progress: succeeded
 ```
 
 DriverEntry cleanup regression validation:
