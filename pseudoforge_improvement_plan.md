@@ -461,25 +461,27 @@ Completed:
   and malformed call text fallback.
 - [x] Added typed assignment facts for RHS identifiers, numeric literals, and
   pure RHS call expressions.
+- [x] Added lvar type, argument, location, index, and identity facts from
+  `FunctionCapture.lvars`.
 
 Remaining:
 
-- [ ] Add lvar type facts from `FunctionCapture.lvars`.
 - [ ] Add profile facts for known functions and enums.
 - [ ] Add rule match gates for argument count and literal argument values.
 
 ### Current Evidence
 
-- `RuleContext` now indexes regex facts plus call-site and assignment dataflow
-  facts.
+- `RuleContext` now indexes regex facts plus call-site, assignment dataflow, and
+  local-variable metadata facts.
 - Existing render and kernel rewrite code already contains argument splitting,
   call-argument parsing, literal parsing, and helper-specific heuristics.
 
 ### Problem
 
-V2 rules need stronger facts than text spans. Without typed call-site and
-assignment facts, JSON rules either become too weak to be useful or too broad to
-be safe. Reusing parser helpers also reduces duplicate parsing bugs.
+V2 rules need stronger facts than text spans. Without typed call-site,
+assignment, and local-variable facts, JSON rules either become too weak to be
+useful or too broad to be safe. Reusing parser helpers also reduces duplicate
+parsing bugs.
 
 ### Plan
 

@@ -1855,6 +1855,39 @@ __int64 __fastcall RuleContextAssignmentSample(void *inputBuffer)
         self.assertEqual([], wide.rhs_identifiers)
         self.assertEqual([], wide.rhs_literals)
 
+    def test_rule_context_lvar_facts_include_type_and_identity_metadata(self):
+        capture = capture_from_pseudocode(
+            """
+__int64 __fastcall RuleContextLvarSample(void *inputBuffer)
+{
+  int status;
+  char *buffer;
+
+  return 0;
+}
+"""
+        )
+        capture.lvars = [
+            LocalVariable("inputBuffer", "void *", True, 0, "arg:0", "arg-id"),
+            LocalVariable("status", "NTSTATUS", False, 1, "stack:-4", "status-id"),
+            LocalVariable("scratch", "", False, 2, "stack:-8", "scratch-id"),
+        ]
+
+        context = build_rule_context(capture)
+        lvars = {item.name: item for item in context.lvar_facts}
+
+        self.assertEqual({"inputBuffer", "status", "scratch"}, context.lvar_names)
+        self.assertEqual({"inputBuffer"}, context.arg_names)
+        self.assertEqual({"inputBuffer": "void *", "status": "NTSTATUS"}, context.lvar_types)
+        self.assertEqual("void *", lvars["inputBuffer"].type)
+        self.assertTrue(lvars["inputBuffer"].is_arg)
+        self.assertEqual(0, lvars["inputBuffer"].index)
+        self.assertEqual("arg:0", lvars["inputBuffer"].location)
+        self.assertEqual("arg-id", lvars["inputBuffer"].identity)
+        self.assertEqual("NTSTATUS", lvars["status"].type)
+        self.assertFalse(lvars["status"].is_arg)
+        self.assertEqual("scratch-id", lvars["scratch"].identity)
+
     def test_rule_engine_assignment_regex_binding_and_scope_gate(self):
         capture = capture_from_pseudocode(
             """

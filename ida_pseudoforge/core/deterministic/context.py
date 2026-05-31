@@ -12,6 +12,16 @@ from ida_pseudoforge.core.plan_schema import FunctionCapture
 
 
 @dataclass(slots=True)
+class LvarFact:
+    name: str
+    type: str = ""
+    is_arg: bool = False
+    index: int = -1
+    location: str = ""
+    identity: str = ""
+
+
+@dataclass(slots=True)
 class AssignmentFact:
     target: str
     expression: str
@@ -50,6 +60,9 @@ class RuleContext:
     lines: list[str]
     lvar_names: set[str]
     calls: set[str]
+    lvar_types: dict[str, str] = field(default_factory=dict)
+    arg_names: set[str] = field(default_factory=set)
+    lvar_facts: list[LvarFact] = field(default_factory=list)
     assignments: list[AssignmentFact] = field(default_factory=list)
     call_sites: list[CallSiteFact] = field(default_factory=list)
     labels: list[LabelFact] = field(default_factory=list)
@@ -66,17 +79,44 @@ _LITERAL_RE = re.compile(r"\b(?:0x[0-9A-Fa-f]+|\d+)\b")
 
 def build_rule_context(capture: FunctionCapture, text: str | None = None) -> RuleContext:
     rule_text = capture.pseudocode if text is None else text
+    lvar_facts = _lvar_facts(capture)
     return RuleContext(
         capture=capture,
         text=rule_text or "",
         lines=(rule_text or "").splitlines(),
-        lvar_names={var.name for var in capture.lvars},
+        lvar_names={fact.name for fact in lvar_facts if fact.name},
+        lvar_types=_lvar_types(lvar_facts),
+        arg_names={fact.name for fact in lvar_facts if fact.name and fact.is_arg},
         calls={str(name) for name in capture.calls},
+        lvar_facts=lvar_facts,
         assignments=_assignment_facts(rule_text or ""),
         call_sites=_call_site_facts(rule_text or ""),
         labels=_label_facts(rule_text or ""),
         literals=_literal_facts(rule_text or ""),
     )
+
+
+def _lvar_facts(capture: FunctionCapture) -> list[LvarFact]:
+    return [
+        LvarFact(
+            name=var.name,
+            type=var.type,
+            is_arg=var.is_arg,
+            index=var.index,
+            location=var.location,
+            identity=var.identity,
+        )
+        for var in capture.lvars
+        if var.name
+    ]
+
+
+def _lvar_types(facts: list[LvarFact]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for fact in facts:
+        if fact.name and fact.type and fact.name not in result:
+            result[fact.name] = fact.type
+    return result
 
 
 def _assignment_facts(text: str) -> list[AssignmentFact]:

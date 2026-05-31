@@ -199,6 +199,9 @@ class RuleContext:
     lines: list[str]
     lvar_names: set[str]
     calls: set[str]
+    lvar_types: dict[str, str]
+    arg_names: set[str]
+    lvar_facts: list[LvarFact]
     assignments: list[AssignmentFact]
     call_sites: list[CallSiteFact]
     labels: list[LabelFact]
@@ -213,6 +216,11 @@ with empty arguments rather than failing context construction.
 span, RHS identifiers, numeric literal values, and pure RHS call
 name/arguments. Expressions such as `Call(x) + 1` keep identifier and literal
 facts but do not report a pure RHS call.
+
+`LvarFact` records the captured local or argument name, type text, argument
+status, index, storage/location text, and stable identity when the capture
+source provides it. `lvar_types` and `arg_names` are convenience indexes over
+those facts.
 
 The first implementation can use regex-based fact extraction. Ctree-identity based facts can be added later.
 

@@ -175,7 +175,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 202 unit tests
+   - current suite covers 203 unit tests
 
 ## Latest Implementation Notes
 
@@ -246,6 +246,10 @@ P2 RuleContext call-site facts update:
   pure RHS call names/arguments for assignment dataflow gates.
 - Non-call RHS expressions keep call details empty while preserving identifier
   and literal facts.
+- `RuleContext` now exposes local-variable facts from `FunctionCapture.lvars`,
+  including type text, argument status, index, location, and identity metadata.
+- `lvar_types` and `arg_names` indexes provide direct access to typed locals
+  and captured arguments without reparsing pseudocode declarations.
 
 P0 rename identity hardening update:
 
