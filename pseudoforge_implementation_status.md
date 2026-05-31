@@ -183,7 +183,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 228 unit tests
+   - current suite covers 231 unit tests
 
 ## Latest Implementation Notes
 
@@ -209,8 +209,9 @@ P1 renderer snapshot protection update:
   `PROCESSINFOCLASS`, and character case labels now lives in
   `ida_pseudoforge/core/render_dispatcher.py`.
 - IOCTL/IRP rendering for `CTL_CODE(...)` switch annotations,
-  `AssociatedIrp.SystemBuffer`, and `IO_STACK_LOCATION.Parameters.DeviceIoControl`
-  field access now lives in `ida_pseudoforge/core/render_ioctl.py`.
+  `AssociatedIrp.SystemBuffer`, IRP dispatch signatures/body cleanup, and
+  `IO_STACK_LOCATION.Parameters.DeviceIoControl` field access now lives in
+  `ida_pseudoforge/core/render_ioctl.py`.
 - Semantic label rendering for cleanup label renaming, annotations,
   indentation normalization, and stale embedded-tail hoisting now lives in
   `ida_pseudoforge/core/render_labels.py`.
@@ -586,6 +587,17 @@ python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: pass
 git diff --check -- .: passed
 python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_callback_extract_smoke: succeeded
 python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_callback_extract_smoke --format json --no-progress: succeeded
+```
+
+IRP dispatch renderer extraction validation:
+
+```text
+python -B -m unittest tests.test_render_ioctl tests.test_render_snapshots tests.test_core_engine.CoreEngineTests.test_ioctl_switch_case_labels_decode_ctl_code_bitfields tests.test_core_engine.CoreEngineTests.test_no_pdb_ioctl_dispatch_uses_body_evidence_for_irp_and_stack_roles tests.test_core_engine.CoreEngineTests.test_no_pdb_create_close_dispatch_uses_completion_call_evidence_for_irp tests.test_core_engine.CoreEngineTests.test_irp_completion_helper_is_not_promoted_to_driver_dispatch tests.test_core_engine.CoreEngineTests.test_ioctl_stack_location_rewrite_does_not_require_device_extension_use tests.test_core_engine.CoreEngineTests.test_irp_stack_location_union_arm_is_not_forced_without_ioctl_evidence tests.test_core_engine.CoreEngineTests.test_irp_stack_location_roles_require_driver_dispatch_evidence tests.test_core_engine.CoreEngineTests.test_llm_ioctl_like_names_do_not_force_irp_union_arm_without_dispatch_evidence tests.test_core_engine.CoreEngineTests.test_master_irp_alias_rewrite_requires_all_buffered_ioctl_cases tests.test_core_engine.CoreEngineTests.test_master_irp_alias_rewrite_requires_device_control_stack_evidence -v: 17 tests OK
+python -B -m unittest discover -s tests -v: 231 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_irp_extract_smoke: succeeded
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_irp_extract_smoke --format json --no-progress: succeeded
 ```
 
 DriverEntry cleanup regression validation:

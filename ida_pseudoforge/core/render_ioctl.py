@@ -15,6 +15,46 @@ _C_INTEGER_SUFFIX_PATTERN = r"(?i:ui64|i64|u?ll|llu|ul|lu|u|l)"
 _C_UNSIGNED_INTEGER_LITERAL_PATTERN = r"(?:0x[0-9A-Fa-f]+|\d+)(?:%s)?" % _C_INTEGER_SUFFIX_PATTERN
 
 
+def irp_dispatch_signature_override(function_name: str) -> list[str]:
+    return [
+        "NTSTATUS __fastcall %s(" % (function_name or "DriverDispatch"),
+        "        PDEVICE_OBJECT deviceObject,",
+        "        PIRP irp)",
+    ]
+
+
+def normalize_irp_dispatch_body(text: str) -> str:
+    result = re.sub(
+        r"(?m)^(\s*)(?:int|unsigned int|ULONG)\s+status(\s*;[^\n]*)$",
+        r"\1NTSTATUS status\2",
+        text,
+        count=1,
+    )
+    result = re.sub(
+        r"(?m)^(\s*)(?:__int64|unsigned __int64|int|unsigned int|ULONG)\s+"
+        r"(inputBufferLength|outputBufferLength|ioControlCode)(\s*;[^\n]*)$",
+        r"\1ULONG \2\3",
+        result,
+    )
+    result = re.sub(
+        r"(?m)^(\s*)(?:__int64|unsigned __int64|ULONG_PTR)\s+information(\s*;[^\n]*)$",
+        r"\1ULONG_PTR information\2",
+        result,
+        count=1,
+    )
+    result = re.sub(
+        r"(?m)^(?P<indent>\s*)(?P<extension>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+        r"\*\(\s*_QWORD\s+\*\s*\)\s*\(\s*deviceObject\s*\+\s*64\s*\)\s*;",
+        r"\g<indent>\g<extension> = deviceObject->DeviceExtension;",
+        result,
+        count=1,
+    )
+    result = _rewrite_irp_parameter_aliases(result)
+    result = _rewrite_redundant_irp_completion_casts(result)
+    result = re.sub(r"\breturn\s+\(\s*unsigned\s+int\s*\)\s*status\s*;", "return status;", result)
+    return result
+
+
 def annotate_ioctl_code_switch_cases(text: str, plan: CleanPlan) -> str:
     dispatcher_names = _ioctl_dispatcher_names(text, plan)
     if not dispatcher_names:
@@ -165,6 +205,46 @@ def _switch_pattern_for_dispatchers(dispatcher_names: set[str]) -> re.Pattern[st
     return re.compile(
         r"\bswitch\s*\(\s*(?:\(\s*[^()]+\s*\)\s*)*\b(?:%s)\b[^)]*\)" % dispatcher_pattern
     )
+
+
+def _rewrite_redundant_irp_completion_casts(text: str) -> str:
+    return re.sub(
+        r"\b(Iof?CompleteRequest\s*\()\s*\(\s*(?:PIRP|(?:struct\s+)?_?IRP\s*\*)\s*\)\s*irp\s*,",
+        r"\1irp,",
+        text,
+    )
+
+
+def _rewrite_irp_parameter_aliases(text: str) -> str:
+    lines = text.splitlines()
+    declaration_index = -1
+    alias = ""
+    for index, line in enumerate(lines):
+        match = re.match(r"^\s*IRP\s+\*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*;[^\n]*$", line)
+        if match is not None:
+            declaration_index = index
+            alias = match.group("alias")
+            break
+    if declaration_index < 0:
+        return text
+    if re.search(r"\b%s\s*(?:\+|\[)" % re.escape(alias), text):
+        return text
+    assignment_index = -1
+    for index in range(declaration_index + 1, len(lines)):
+        stripped = lines[index].strip()
+        if re.match(r"%s\s*=\s*\(\s*IRP\s+\*\s*\)irp\s*;" % re.escape(alias), stripped):
+            assignment_index = index
+            break
+        if re.match(r"(?:if|for|while|switch|case|default|goto|return)\b", stripped):
+            return text
+    if assignment_index < 0:
+        return text
+    del lines[assignment_index]
+    del lines[declaration_index]
+    result = "\n".join(lines)
+    result = re.sub(r"\b%s(?=\s*->)" % re.escape(alias), "irp", result)
+    result = re.sub(r"\bIof?CompleteRequest\s*\(\s*%s\s*," % re.escape(alias), "IofCompleteRequest(irp,", result)
+    return result
 
 
 def _all_ioctl_cases_method_buffered(text: str, plan: CleanPlan, dispatcher_names: set[str]) -> bool:

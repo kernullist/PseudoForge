@@ -5,6 +5,8 @@ import unittest
 from ida_pseudoforge.core.plan_schema import CleanPlan, FlowRewrite, FunctionCapture
 from ida_pseudoforge.core.render_ioctl import (
     annotate_ioctl_code_switch_cases,
+    irp_dispatch_signature_override,
+    normalize_irp_dispatch_body,
     rewrite_device_control_system_buffer,
     rewrite_irp_stack_location_fields,
 )
@@ -36,6 +38,74 @@ def _irp_capture(text: str) -> FunctionCapture:
 
 
 class RenderIoctlTests(unittest.TestCase):
+    def test_irp_dispatch_signature_override_uses_canonical_parameters(self) -> None:
+        self.assertEqual(
+            irp_dispatch_signature_override("DispatchDeviceControl"),
+            [
+                "NTSTATUS __fastcall DispatchDeviceControl(",
+                "        PDEVICE_OBJECT deviceObject,",
+                "        PIRP irp)",
+            ],
+        )
+
+    def test_normalize_irp_dispatch_body_rewrites_alias_and_status_types(self) -> None:
+        text = "\n".join(
+            [
+                "NTSTATUS __fastcall DispatchDeviceControl(PDEVICE_OBJECT deviceObject, PIRP irp)",
+                "{",
+                "  int status;",
+                "  __int64 inputBufferLength;",
+                "  unsigned __int64 outputBufferLength;",
+                "  int ioControlCode;",
+                "  __int64 information;",
+                "  IRP *irpAlias;",
+                "  PVOID deviceExtension;",
+                "",
+                "  deviceExtension = *(_QWORD *)(deviceObject + 64);",
+                "  irpAlias = (IRP *)irp;",
+                "  irpAlias->IoStatus.Status = status;",
+                "  IofCompleteRequest((IRP *)irp, 0);",
+                "  return (unsigned int)status;",
+                "}",
+            ]
+        )
+
+        rendered = normalize_irp_dispatch_body(text)
+
+        self.assertIn("NTSTATUS status;", rendered)
+        self.assertIn("ULONG inputBufferLength;", rendered)
+        self.assertIn("ULONG outputBufferLength;", rendered)
+        self.assertIn("ULONG ioControlCode;", rendered)
+        self.assertIn("ULONG_PTR information;", rendered)
+        self.assertIn("deviceExtension = deviceObject->DeviceExtension;", rendered)
+        self.assertIn("irp->IoStatus.Status = status;", rendered)
+        self.assertIn("IofCompleteRequest(irp, 0);", rendered)
+        self.assertIn("return status;", rendered)
+        self.assertNotIn("IRP *irpAlias;", rendered)
+        self.assertNotIn("irpAlias = (IRP *)irp;", rendered)
+
+    def test_normalize_irp_dispatch_body_keeps_conditional_irp_alias(self) -> None:
+        text = "\n".join(
+            [
+                "NTSTATUS __fastcall DispatchDeviceControl(PDEVICE_OBJECT deviceObject, PIRP irp)",
+                "{",
+                "  IRP *irpAlias;",
+                "",
+                "  if ( deviceObject )",
+                "  {",
+                "    irpAlias = (IRP *)irp;",
+                "  }",
+                "  IofCompleteRequest(irpAlias, 0);",
+                "}",
+            ]
+        )
+
+        rendered = normalize_irp_dispatch_body(text)
+
+        self.assertIn("IRP *irpAlias;", rendered)
+        self.assertIn("irpAlias = (IRP *)irp;", rendered)
+        self.assertIn("IofCompleteRequest(irpAlias, 0);", rendered)
+
     def test_annotate_ioctl_code_switch_cases_only_updates_ioctl_dispatcher(self) -> None:
         text = "\n".join(
             [

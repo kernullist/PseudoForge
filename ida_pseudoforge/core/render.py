@@ -42,6 +42,8 @@ from ida_pseudoforge.core.render_driver_entry import (
 )
 from ida_pseudoforge.core.render_ioctl import (
     annotate_ioctl_code_switch_cases as _annotate_ioctl_code_switch_cases,
+    irp_dispatch_signature_override as _irp_dispatch_signature_override,
+    normalize_irp_dispatch_body as _normalize_irp_dispatch_body,
     rewrite_device_control_system_buffer as _rewrite_device_control_system_buffer,
     rewrite_irp_stack_location_fields as _rewrite_irp_stack_location_fields,
 )
@@ -441,14 +443,6 @@ def _apply_known_function_signature(text: str, capture: FunctionCapture) -> str:
     return text
 
 
-def _irp_dispatch_signature_override(function_name: str) -> list[str]:
-    return [
-        "NTSTATUS __fastcall %s(" % (function_name or "DriverDispatch"),
-        "        PDEVICE_OBJECT deviceObject,",
-        "        PIRP irp)",
-    ]
-
-
 def _apply_known_callback_signature(text: str, capture: FunctionCapture) -> str:
     return _apply_known_callback_signature_impl(text, capture, _find_signature_end)
 
@@ -467,78 +461,6 @@ def _apply_known_signature_body_rewrites(text: str, capture: FunctionCapture) ->
             return _normalize_zw_api_probe_body(text)
         return text
     return _normalize_ntset_system_information_body(text)
-
-
-def _normalize_irp_dispatch_body(text: str) -> str:
-    result = re.sub(
-        r"(?m)^(\s*)(?:int|unsigned int|ULONG)\s+status(\s*;[^\n]*)$",
-        r"\1NTSTATUS status\2",
-        text,
-        count=1,
-    )
-    result = re.sub(
-        r"(?m)^(\s*)(?:__int64|unsigned __int64|int|unsigned int|ULONG)\s+"
-        r"(inputBufferLength|outputBufferLength|ioControlCode)(\s*;[^\n]*)$",
-        r"\1ULONG \2\3",
-        result,
-    )
-    result = re.sub(
-        r"(?m)^(\s*)(?:__int64|unsigned __int64|ULONG_PTR)\s+information(\s*;[^\n]*)$",
-        r"\1ULONG_PTR information\2",
-        result,
-        count=1,
-    )
-    result = re.sub(
-        r"(?m)^(?P<indent>\s*)(?P<extension>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
-        r"\*\(\s*_QWORD\s+\*\s*\)\s*\(\s*deviceObject\s*\+\s*64\s*\)\s*;",
-        r"\g<indent>\g<extension> = deviceObject->DeviceExtension;",
-        result,
-        count=1,
-    )
-    result = _rewrite_irp_parameter_aliases(result)
-    result = _rewrite_redundant_irp_completion_casts(result)
-    result = re.sub(r"\breturn\s+\(\s*unsigned\s+int\s*\)\s*status\s*;", "return status;", result)
-    return result
-
-
-def _rewrite_redundant_irp_completion_casts(text: str) -> str:
-    return re.sub(
-        r"\b(Iof?CompleteRequest\s*\()\s*\(\s*(?:PIRP|(?:struct\s+)?_?IRP\s*\*)\s*\)\s*irp\s*,",
-        r"\1irp,",
-        text,
-    )
-
-
-def _rewrite_irp_parameter_aliases(text: str) -> str:
-    lines = text.splitlines()
-    declaration_index = -1
-    alias = ""
-    for index, line in enumerate(lines):
-        match = re.match(r"^\s*IRP\s+\*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*;[^\n]*$", line)
-        if match is not None:
-            declaration_index = index
-            alias = match.group("alias")
-            break
-    if declaration_index < 0:
-        return text
-    if re.search(r"\b%s\s*(?:\+|\[)" % re.escape(alias), text):
-        return text
-    assignment_index = -1
-    for index in range(declaration_index + 1, len(lines)):
-        stripped = lines[index].strip()
-        if re.match(r"%s\s*=\s*\(\s*IRP\s+\*\s*\)irp\s*;" % re.escape(alias), stripped):
-            assignment_index = index
-            break
-        if re.match(r"(?:if|for|while|switch|case|default|goto|return)\b", stripped):
-            return text
-    if assignment_index < 0:
-        return text
-    del lines[assignment_index]
-    del lines[declaration_index]
-    result = "\n".join(lines)
-    result = re.sub(r"\b%s(?=\s*->)" % re.escape(alias), "irp", result)
-    result = re.sub(r"\bIof?CompleteRequest\s*\(\s*%s\s*," % re.escape(alias), "IofCompleteRequest(irp,", result)
-    return result
 
 
 def _zw_probe_object_attribute_variables(text: str) -> set[str]:
