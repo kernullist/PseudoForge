@@ -171,6 +171,8 @@ Completed:
   into a scoped `render_warnings` module while preserving public render imports.
 - [x] Moved flow report and conservative switch outline rendering into a scoped
   `render_flow` module while preserving public render imports.
+- [x] Moved path-like C/C++ string literal finalization into a scoped
+  `render_literals` module while preserving public render imports.
 
 Remaining:
 
@@ -182,9 +184,9 @@ Remaining:
 ### Current Evidence
 
 - `ida_pseudoforge/core/render.py` is the largest production module at roughly
-  560 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
-  DriverEntry, callback, IRP dispatch, Zw API, NtSet, warning-display, and
-  flow/switch-outline extraction slices.
+  475 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
+  DriverEntry, callback, IRP dispatch, Zw API, NtSet, warning-display,
+  flow/switch-outline, and path-literal extraction slices.
 - `render_cleaned_pseudocode()` still coordinates many ordered text passes in
   `ida_pseudoforge/core/render.py`.
 - `ida_pseudoforge/core/render.py` preserves the public `write_export_bundle`
@@ -206,6 +208,8 @@ Remaining:
   now lives in `ida_pseudoforge/core/render_warnings.py`.
 - Flow report and conservative switch outline rendering now live in
   `ida_pseudoforge/core/render_flow.py`.
+- Path-like C/C++ string literal finalization now lives in
+  `ida_pseudoforge/core/render_literals.py`.
 
 ### Problem
 
