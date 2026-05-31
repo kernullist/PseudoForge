@@ -172,6 +172,7 @@ Implemented in this folder:
    - `tests/test_core_engine.py`
    - `tests/test_ida_plugin_safety.py`
    - `tests/test_render_dispatcher.py`
+   - `tests/test_render_ioctl.py`
    - `tests/test_render_snapshots.py`
    - `tests/test_render_style.py`
    - `tests/test_profile_loader.py`
@@ -179,7 +180,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 218 unit tests
+   - current suite covers 221 unit tests
 
 ## Latest Implementation Notes
 
@@ -204,6 +205,9 @@ P1 renderer snapshot protection update:
 - Dispatcher/profile literal rendering for `SYSTEM_INFORMATION_CLASS`,
   `PROCESSINFOCLASS`, and character case labels now lives in
   `ida_pseudoforge/core/render_dispatcher.py`.
+- IOCTL/IRP rendering for `CTL_CODE(...)` switch annotations,
+  `AssociatedIrp.SystemBuffer`, and `IO_STACK_LOCATION.Parameters.DeviceIoControl`
+  field access now lives in `ida_pseudoforge/core/render_ioctl.py`.
 
 P1 profile loader diagnostics update:
 

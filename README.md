@@ -227,6 +227,7 @@ ida_pseudoforge/
     validation.py
     render.py
     render_dispatcher.py
+    render_ioctl.py
     render_status.py
     render_style.py
     plan_schema.py
@@ -289,6 +290,7 @@ tests/
   test_profile_loader.py
   test_pseudoforge_free_cli.py
   test_render_dispatcher.py
+  test_render_ioctl.py
   test_render_snapshots.py
   test_render_style.py
   test_release_pseudoforge.py

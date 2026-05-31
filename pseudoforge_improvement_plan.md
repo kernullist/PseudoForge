@@ -146,6 +146,9 @@ Completed:
 - [x] Moved dispatcher/profile literal rendering for `SYSTEM_INFORMATION_CLASS`,
   `PROCESSINFOCLASS`, and character case labels into a scoped
   `render_dispatcher` module.
+- [x] Moved IOCTL/IRP rendering for `CTL_CODE(...)` switch annotations,
+  `AssociatedIrp.SystemBuffer`, and `IO_STACK_LOCATION.Parameters.DeviceIoControl`
+  field access into a scoped `render_ioctl` module.
 
 Remaining:
 
@@ -157,7 +160,8 @@ Remaining:
 ### Current Evidence
 
 - `ida_pseudoforge/core/render.py` is the largest production module at roughly
-  1780 lines after the status, style, and dispatcher extraction slices.
+  1513 lines after the status, style, dispatcher, and IOCTL/IRP extraction
+  slices.
 - `render_cleaned_pseudocode()` still coordinates many ordered text passes in
   `ida_pseudoforge/core/render.py`.
 - `ida_pseudoforge/core/render.py` preserves the public `write_export_bundle`
@@ -165,8 +169,9 @@ Remaining:
   `ida_pseudoforge/core/export_bundle.py`.
 - Style normalization now lives in `ida_pseudoforge/core/render_style.py`.
 - Dispatcher/profile literal rendering now lives in
-  `ida_pseudoforge/core/render_dispatcher.py`, while IOCTL, driver-entry,
-  callback, and label rewrites remain in `render.py`.
+  `ida_pseudoforge/core/render_dispatcher.py`.
+- IOCTL/IRP rendering now lives in `ida_pseudoforge/core/render_ioctl.py`,
+  while driver-entry, callback, and label rewrites remain in `render.py`.
 
 ### Problem
 
