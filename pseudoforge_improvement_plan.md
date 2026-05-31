@@ -126,7 +126,7 @@ git diff --check -- .
 
 ## P1: Renderer Decomposition And Snapshot Protection
 
-Status: In progress.
+Status: Completed.
 
 Completed:
 
@@ -183,13 +183,15 @@ Completed:
   while preserving public render imports.
 - [x] Moved generated header formatting and kernel semantic rewrite counting
   into a scoped `render_header` module while preserving public render imports.
+- [x] Reduced `render.py` to the render pipeline coordinator, compatibility
+  wrappers, and legacy utility import paths after moving the remaining rewrite
+  families into scoped modules.
 
 Remaining:
 
-- [ ] Move the remaining renderer passes into scoped modules one rewrite family
-  at a time.
-- [ ] Preserve public render imports during extraction.
-- [ ] Keep extraction commits behavior-preserving unless documented otherwise.
+- None for the renderer decomposition slice. Future renderer changes should keep
+  the same one-family-per-commit pattern and preserve public compatibility
+  imports unless a migration is documented.
 
 ### Current Evidence
 
