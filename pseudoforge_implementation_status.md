@@ -503,6 +503,13 @@ P0 rename identity hardening update:
   present, preserving offline and older-capture behavior.
 - Focused safety tests cover identity match, identity drift rejection, and
   legacy fallback plus enriched location anchor extraction.
+- `tools/pseudoforge_ida_identity_apply_smoke.py` validated the identity-backed
+  apply path in IDA Professional 9.0 against a temporary `notepad.exe` IDB:
+  after a Hex-Rays refresh, stable identity preflight passed,
+  same-name/different-identity drift was rejected, `ida_hexrays.rename_lvar()`
+  applied the selected local rename, and the renamed local was visible after a
+  second refresh. The smoke tool refuses non-temp inputs by default because it
+  performs a real local-variable rename.
 
 P2 IDA UX diagnostics update:
 
@@ -1190,7 +1197,6 @@ deferred:
 - LLM model discovery now uses a non-blocking cache-backed refresh; richer live
   refresh UI is still deferred.
 - True object-level ctree rename application is still incomplete; apply continues to call ida_hexrays.rename_lvar(function_ea, old, new) after the new session and identity preflight gates pass.
-- Manual IDA validation of identity-backed apply after local type/name refresh is still pending.
 - Interactive export now shares raw pseudocode, warnings JSON, raw-vs-cleaned diff, and summary JSON artifacts with the CLI paths; only IDA Free CLI-specific run manifest output remains separate.
 ```
 
@@ -1225,7 +1231,8 @@ Keep LLM path enabled with -LlmProvider codex_cli -LlmModel gpt-5.5.
 4. True object-level ctree rename application is not complete.
    - IDA apply currently uses `ida_hexrays.rename_lvar(function_ea, old, new)`
      after identity-aware preflight passes.
-   - Manual IDA validation of enriched lvar anchors is still pending.
+   - Identity-backed preflight and refresh behavior has been validated in a
+     temporary IDA smoke run.
 
 ## Next Steps
 
@@ -1233,6 +1240,6 @@ Keep LLM path enabled with -LlmProvider codex_cli -LlmModel gpt-5.5.
 2. Improve switch body reconstruction for shared/fallthrough branch paths.
 3. Enhance the feature-flagged side-by-side preview with synchronized search
    and warning/rule summary panes.
-4. Manually validate identity-backed local variable rename application inside
-   IDA after local type/name refresh.
+4. Investigate true object-level ctree rename application beyond the validated
+   identity preflight gates.
 5. Expand semantic overlays for more WDK APIs beyond the currently known pool/list/resource cases.

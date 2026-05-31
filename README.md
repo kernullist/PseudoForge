@@ -169,7 +169,7 @@ Implemented:
 Still pending:
 
 1. Full switch body reconstruction for shared and fallthrough branches.
-2. Manual IDA validation and true object-level ctree rename application beyond the current identity preflight gates.
+2. True object-level ctree rename application beyond the current identity preflight gates.
 3. Richer side-by-side preview navigation, synchronized search, and warning/rule summary panes.
 4. Deterministic rule phase expansion for `flow` and broader parity migration.
 5. Wider profile coverage from real target builds.
@@ -1441,6 +1441,22 @@ python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation
 python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_smoke
 ```
 
+IDA identity apply smoke:
+
+The smoke script applies one local-variable rename and therefore refuses
+non-temp input files unless `--allow-non-temp-input` is supplied.
+
+```powershell
+$out = Join-Path $env:TEMP "pseudoforge_ida_identity"
+New-Item -ItemType Directory -Path $out -Force | Out-Null
+Copy-Item "$env:WINDIR\System32\notepad.exe" (Join-Path $out "notepad.exe") -Force
+$script = (Resolve-Path .\tools\pseudoforge_ida_identity_apply_smoke.py).Path
+& "C:\Program Files\IDA Professional 9.0\idat.exe" -A -Opdb:off `
+  "-L$(Join-Path $out 'ida.log')" `
+  "-S`"$script`" --report `"$out\identity_apply_smoke.jsonl`" --max-functions 250" `
+  (Join-Path $out "notepad.exe")
+```
+
 Patch hygiene:
 
 ```powershell
@@ -1529,6 +1545,6 @@ Rename application fails:
 
 1. Continue deterministic rules v2 with a safe `flow` phase after stronger branch evidence exists.
 2. Improve shared and fallthrough branch body reconstruction.
-3. Manually validate identity-backed rename tracking and investigate true object-level ctree rename application.
+3. Investigate true object-level ctree rename application beyond the validated identity preflight gates.
 4. Enhance the feature-flagged side-by-side preview with synchronized search and warning/rule summary panes.
 5. Expand profile coverage against real target builds.

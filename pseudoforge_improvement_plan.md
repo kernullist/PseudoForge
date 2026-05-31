@@ -44,7 +44,7 @@ metadata, and runtime impact rather than hand-reviewing every generated entry.
 
 ## P0: Safer Rename Identity Tracking
 
-Status: In progress.
+Status: Completed.
 
 Completed:
 
@@ -60,16 +60,17 @@ Completed:
 - [x] Added richer IDA lvar location anchor extraction for stable stack offset,
   register, definition EA/block, and locator text surfaces while ignoring object-
   address strings.
+- [x] Validated the identity-backed apply path inside IDA after a local
+  type/name refresh using `tools/pseudoforge_ida_identity_apply_smoke.py`.
 
 Remaining:
 
-- [ ] Validate the identity-backed apply path manually inside IDA after a local
-  type/name refresh.
+- None for the rename identity tracking slice.
 
 ### Current Evidence
 
-- `pseudoforge_implementation_status.md` lists true object-level ctree rename
-  application and manual IDA validation as known incomplete areas.
+- `pseudoforge_implementation_status.md` records the IDA identity apply smoke
+  result for a temp `notepad.exe` IDB.
 - `ida_pseudoforge/core/lvar_analysis.py:35` builds a `CleanPlan` from text
   captures and rename suggestions.
 - `ida_pseudoforge/core/validation.py:148` validates rename candidates by known
@@ -80,6 +81,10 @@ Remaining:
 - `ida_pseudoforge/ida/apply_changes.py` performs final apply preflight, but the
   final IDA write still depends on the old local name string reaching
   `ida_hexrays.rename_lvar()`.
+- `tools/pseudoforge_ida_identity_apply_smoke.py` validates stable identity
+  preflight, same-name/different-identity rejection, `rename_lvar()` application,
+  and post-refresh visibility in a temporary IDB while refusing non-temp inputs
+  by default.
 
 ### Problem
 
@@ -108,8 +113,8 @@ old-name string maps to the same Hex-Rays local identity that was analyzed.
    - same name, different identity: reject
    - same identity, same function, same fingerprint: allow
    - missing identity on legacy capture: require current conservative checks
-6. Add one manual IDA validation checklist item for rename apply after a local
-   type/name refresh.
+6. Add and run an IDA validation smoke for rename apply after a local type/name
+   refresh.
 
 ### Acceptance Criteria
 
@@ -123,6 +128,7 @@ old-name string maps to the same Hex-Rays local identity that was analyzed.
 
 ```powershell
 python -B -m unittest tests.test_ida_plugin_safety -v
+python -B -m unittest tests.test_ida_identity_apply_smoke -v
 python -B -m unittest discover -s tests -v
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools
 git diff --check -- .
