@@ -519,6 +519,17 @@ P2 IDA UX diagnostics update:
   popup keeps error details bounded, while export summaries retain full
   machine-readable rule error details for audit workflows.
 
+P2 IDA LLM model discovery UX update:
+
+- IDA LLM configuration now uses a non-blocking model discovery cache.
+- When no live catalog is cached, the model chooser opens immediately with the
+  provider static list and starts a background refresh for the selected
+  provider/base URL/API-key hash.
+- Duplicate refreshes for the same provider cache key are suppressed while one
+  refresh is already running.
+- Existing fail-closed/fallback behavior is preserved: discovery failures cache
+  provider static models with a warning for the next configuration run.
+
 The current implementation state reflects the `NtSetSystemInformation` and `NtSetInformationProcess` large-dispatcher regression pass:
 
 - `NtSetSystemInformation` preview now uses the canonical native API signature and introduces typed `__m128i *` aliases without changing the underlying decompiler body semantics.

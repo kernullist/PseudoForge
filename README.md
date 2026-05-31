@@ -157,6 +157,8 @@ Implemented:
     counts.
 27. Export summaries and IDA Free result summaries include deterministic rule
     diagnostic counts plus rule load and validation error details.
+28. IDA LLM model discovery uses a non-blocking background refresh cache so
+    configuration dialogs can open with static or cached model lists.
 
 Still pending:
 
@@ -686,6 +688,9 @@ The default timeout is 60 seconds.
 
 Model discovery:
 
+- IDA configuration uses a non-blocking model discovery cache. If no live model
+  catalog is cached yet, the dialog opens with provider static models while a
+  background refresh updates the cache for the next configuration run.
 - `chatgpt_oauth_via_codex_cli` and `codex_cli` read the Codex model catalog through `codex debug models` using argv-based subprocess execution, not a shell command string.
 - If `codex debug models` fails, `%USERPROFILE%\.codex\models_cache.json` is used.
 - Claude CLI providers use provider-specific static model lists. This is the expected path because Claude CLI does not expose a model catalog command. The static list starts with the current Claude API/Claude Code model IDs and aliases: `claude-opus-4-8`, `claude-sonnet-4-6`, and `claude-haiku-4-5`.

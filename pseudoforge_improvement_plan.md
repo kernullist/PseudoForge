@@ -912,13 +912,14 @@ Completed:
 - [x] Added shared rule diagnostics to preview/export summary paths, including
   bounded IDA popup rule error details, export rule error details, and rewrite
   emission status/kind counts.
+- [x] Added non-blocking IDA LLM model discovery refresh through a background
+  cache with static-list fallback and duplicate refresh suppression.
 
 Remaining:
 
 - [ ] Keep `simplecustviewer_t` as the fallback path while adding any richer
   dockable review UI.
 - [ ] Add a dockable side-by-side review panel behind a feature flag.
-- [ ] Add full non-blocking LLM model discovery refresh.
 - [ ] Add cancellation/progress hooks for long LLM and batch work where IDA APIs
   allow it.
 
@@ -932,6 +933,8 @@ Remaining:
   counts before the user opens the detailed JSON report.
 - Export summaries now include shared rule diagnostics with load/validation
   details and rewrite emission counts.
+- IDA LLM configuration now opens with cached/static models while live model
+  discovery refreshes in the background.
 
 ### Problem
 

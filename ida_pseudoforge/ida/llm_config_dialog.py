@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import threading
 from copy import deepcopy
 
 from ida_pseudoforge.config import (
@@ -26,6 +28,11 @@ try:
     import ida_kernwin  # type: ignore
 except Exception:
     ida_kernwin = None
+
+
+_MODEL_DISCOVERY_CACHE: dict[tuple[str, str, str], ModelDiscoveryResult] = {}
+_MODEL_DISCOVERY_INFLIGHT: set[tuple[str, str, str]] = set()
+_MODEL_DISCOVERY_LOCK = threading.Lock()
 
 
 def ask_llm_config(current_config: PseudoForgeConfig, warn) -> PseudoForgeConfig | None:
@@ -80,7 +87,7 @@ def ask_llm_config(current_config: PseudoForgeConfig, warn) -> PseudoForgeConfig
             set_provider_api_key(updated_config, provider, api_key_input)
 
     with trace_scope("config.discover_models", provider=provider):
-        model_options = _safe_discover_models(
+        model_options = _model_options_for_dialog(
             provider,
             base_url=base_url or defaults.base_url,
             api_key=get_provider_api_key(updated_config, provider),
@@ -276,6 +283,97 @@ def _safe_discover_models(
             source="static fallback",
             warning="model discovery failed: %s" % exc,
         )
+
+
+def _model_options_for_dialog(
+    provider: str,
+    base_url: str = "",
+    api_key: str = "",
+    timeout_seconds: int = 15,
+) -> ModelDiscoveryResult:
+    normalized = normalize_provider(provider)
+    key = _model_discovery_cache_key(normalized, base_url, api_key)
+    with _MODEL_DISCOVERY_LOCK:
+        cached = _MODEL_DISCOVERY_CACHE.get(key)
+    if cached is not None:
+        if cached.warning or cached.source.startswith("static fallback"):
+            _start_model_discovery_refresh(
+                normalized,
+                key,
+                base_url=base_url,
+                api_key=api_key,
+                timeout_seconds=timeout_seconds,
+            )
+        return cached
+    _start_model_discovery_refresh(
+        normalized,
+        key,
+        base_url=base_url,
+        api_key=api_key,
+        timeout_seconds=timeout_seconds,
+    )
+    return ModelDiscoveryResult(
+        models=list(provider_model_options(normalized)),
+        source="static fallback (background refresh pending)",
+    )
+
+
+def _start_model_discovery_refresh(
+    provider: str,
+    key: tuple[str, str, str],
+    base_url: str = "",
+    api_key: str = "",
+    timeout_seconds: int = 15,
+) -> bool:
+    with _MODEL_DISCOVERY_LOCK:
+        if key in _MODEL_DISCOVERY_INFLIGHT:
+            return False
+        _MODEL_DISCOVERY_INFLIGHT.add(key)
+
+    def refresh() -> None:
+        log_checkpoint("config.model_discovery.refresh.before", provider=provider)
+        try:
+            result = _safe_discover_models(
+                provider,
+                base_url=base_url,
+                api_key=api_key,
+                timeout_seconds=timeout_seconds,
+            )
+            with _MODEL_DISCOVERY_LOCK:
+                _MODEL_DISCOVERY_CACHE[key] = result
+            log_checkpoint(
+                "config.model_discovery.refresh.after",
+                provider=provider,
+                source=result.source,
+                models=len(result.models),
+                warning=bool(result.warning),
+            )
+        finally:
+            with _MODEL_DISCOVERY_LOCK:
+                _MODEL_DISCOVERY_INFLIGHT.discard(key)
+
+    thread = threading.Thread(
+        target=refresh,
+        name="PseudoForge-model-discovery-%s" % provider,
+        daemon=True,
+    )
+    thread.start()
+    return True
+
+
+def _model_discovery_cache_key(provider: str, base_url: str, api_key: str) -> tuple[str, str, str]:
+    key_hash = hashlib.sha256(api_key.encode("utf-8", errors="replace")).hexdigest() if api_key else ""
+    return (
+        normalize_provider(provider),
+        str(base_url or "").rstrip("/"),
+        key_hash,
+    )
+
+
+def _reset_model_discovery_cache_for_tests() -> None:
+    with _MODEL_DISCOVERY_LOCK:
+        _MODEL_DISCOVERY_CACHE.clear()
+        _MODEL_DISCOVERY_INFLIGHT.clear()
 
 
 def _current_or_default(current_value: str, default_value: str, provider_changed: bool) -> str:

@@ -645,6 +645,50 @@ class IdaPluginSafetyTests(unittest.TestCase):
         self.assertEqual(result.source, "static fallback")
         self.assertIn("model discovery failed", result.warning)
 
+    def test_model_discovery_dialog_uses_nonblocking_background_refresh(self):
+        old_discover = llm_config_dialog.discover_provider_models
+        started = threading.Event()
+        release = threading.Event()
+        calls = []
+
+        def fake_discover(*args, **kwargs):
+            calls.append((args, kwargs))
+            started.set()
+            release.wait(2.0)
+            return llm_config_dialog.ModelDiscoveryResult(
+                models=["fresh-codex-model"],
+                source="test catalog",
+            )
+
+        llm_config_dialog._reset_model_discovery_cache_for_tests()
+        llm_config_dialog.discover_provider_models = fake_discover
+        try:
+            first = llm_config_dialog._model_options_for_dialog(PROVIDER_CODEX_CLI)
+            self.assertIn("gpt-5", first.models)
+            self.assertEqual("static fallback (background refresh pending)", first.source)
+            self.assertTrue(started.wait(1.0))
+
+            second = llm_config_dialog._model_options_for_dialog(PROVIDER_CODEX_CLI)
+            self.assertEqual("static fallback (background refresh pending)", second.source)
+            self.assertEqual(1, len(calls))
+
+            release.set()
+            deadline = time.time() + 2.0
+            refreshed = None
+            while time.time() < deadline:
+                candidate = llm_config_dialog._model_options_for_dialog(PROVIDER_CODEX_CLI)
+                if candidate.models == ["fresh-codex-model"]:
+                    refreshed = candidate
+                    break
+                time.sleep(0.01)
+
+            self.assertIsNotNone(refreshed)
+            self.assertEqual("test catalog", refreshed.source)
+        finally:
+            release.set()
+            llm_config_dialog.discover_provider_models = old_discover
+            llm_config_dialog._reset_model_discovery_cache_for_tests()
+
     def test_configure_handler_does_not_save_when_dialog_fails(self):
         handler = actions_module.ConfigureLlmHandler()
         old_load = actions_module.load_config
