@@ -186,6 +186,9 @@ P1 renderer snapshot protection update:
   preserving the rendered header/body structure for regression review.
 - Snapshot updates require explicit `PSEUDOFORGE_UPDATE_SNAPSHOTS=1` and are
   documented in `tests/snapshots/README.md`.
+- `render_cleaned_pseudocode()` now builds a `RenderContext` carrying capture,
+  plan, active rename map, display-filtered warnings, and native switch
+  dispatcher metadata before header/body rendering.
 
 P0 rename identity hardening update:
 

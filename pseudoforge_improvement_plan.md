@@ -136,10 +136,11 @@ Completed:
   DriverEntry/device-extension cleanup, IOCTL dispatch, OB pre-operation
   callback, and generic non-kernel style output.
 - [x] Added an explicit snapshot update workflow under `tests/snapshots`.
+- [x] Introduced `RenderContext` for capture, plan, rename map, displayed
+  warnings, and native switch dispatcher metadata.
 
 Remaining:
 
-- [ ] Introduce `RenderContext`.
 - [ ] Move renderer passes into scoped modules one rewrite family at a time.
 - [ ] Preserve public render imports during extraction.
 - [ ] Keep extraction commits behavior-preserving unless documented otherwise.
