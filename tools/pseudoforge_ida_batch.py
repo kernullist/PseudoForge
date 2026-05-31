@@ -448,7 +448,16 @@ def _write_compare_artifacts(
     forge_path.write_text(section_output, encoding="utf-8")
     diff_path.write_text(diff_output, encoding="utf-8")
 
+    artifacts = {
+        "raw_pseudocode": str(raw_path),
+        "cleaned_pseudocode": str(cleaned_path),
+        "forge_section": str(forge_path),
+        "raw_vs_cleaned_diff": str(diff_path),
+    }
     return {
+        "mode": "ida_batch",
+        "schema": "ida_batch_compare_v2",
+        "artifacts": artifacts,
         "raw_path": str(raw_path),
         "cleaned_path": str(cleaned_path),
         "forge_path": str(forge_path),

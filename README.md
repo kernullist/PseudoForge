@@ -1025,7 +1025,8 @@ Compare raw Hex-Rays output against PseudoForge output:
 - `forge\*.forge`: full `.forge` section for the function.
 - `diff\*.diff`: raw vs cleaned unified diff.
 
-Each JSONL function record includes comparison paths, SHA-256 hashes, line counts, and diff line counts.
+Each JSONL function record includes legacy comparison paths, a shared-style
+`artifacts` map, SHA-256 hashes, line counts, and diff line counts.
 
 To include the same LLM assist path used by interactive IDA Analyze, add `-LlmRenames`. Full-kernel LLM batch runs can issue many provider calls, so check cost and runtime first.
 

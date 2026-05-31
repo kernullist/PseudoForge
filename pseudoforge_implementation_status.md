@@ -139,6 +139,7 @@ Implemented in this folder:
    - IDA Free CLI path does not import IDA-only modules, does not use IDAPython or local Hex-Rays APIs, and does not modify an IDB
    - headless IDA batch mode can iterate `.i64`/`.idb` functions, call Hex-Rays decompile, analyze through PseudoForge, append `.forge` sections, and write JSONL progress reports
    - optional `--compare-dir` / `-CompareDir` emits per-function raw Hex-Rays text, PseudoForge cleaned output, full `.forge` section, and raw-vs-cleaned unified diff artifacts
+   - batch compare JSONL records include shared-style artifact keys while preserving legacy path fields
    - optional `--llm-renames` / `-LlmRenames` routes batch analysis through the same rename provider/fallback path as interactive IDA Analyze
    - Hex-Rays decompile-unavailable functions are recorded as `skipped` instead of PseudoForge failures
 
@@ -255,6 +256,9 @@ The current implementation state reflects the `NtSetSystemInformation` and `NtSe
 - Preview/save/copy paths finalize escaped path-like string literals consistently, and current-function preview opens the matching `.forge` section instead of always opening the full aggregate file.
 - Headless IDA batch analysis now prefers the workspace package over an already installed IDA plugin package, merges text-declared locals with `cfunc.lvars`, and supports append-only `.forge` writing for full-kernel sweeps.
 - Batch comparison artifacts can now be enabled for raw Hex-Rays vs PseudoForge review without changing the default full-kernel sweep output size.
+- Batch comparison records keep legacy path fields and include shared-style
+  artifact keys for raw pseudocode, cleaned pseudocode, forge sections, and
+  raw-vs-cleaned diffs.
 - Batch LLM mode is explicit: deterministic sweeps stay cheap by default, while `-LlmRenames` uses configured provider settings and records per-function `llm_status`.
 - A WDK WDM kernel-pattern driver corpus now lives under `samples/kernel_pattern_driver`; Release/Debug x64 builds and TestSign succeed locally.
 - The kernel-pattern driver now includes an opt-in `ObRegisterCallbacks` process object callback path with LIST_ENTRY-backed whitelist/blacklist walks, `CONTAINING_RECORD`, requested-access checks, and whitelist auto-add telemetry concentrated inside `PfkpObjectPreOperation` for single-function decompile testing.

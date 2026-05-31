@@ -315,12 +315,12 @@ Completed:
 - [x] Moved shared artifact writing into `ida_pseudoforge/core/export_bundle.py`
   while preserving the legacy `ida_pseudoforge.core.render.write_export_bundle`
   import path.
+- [x] Added shared-style artifact keys to IDA batch compare records while
+  preserving legacy `raw_path`/`cleaned_path`/`diff_path` fields.
 
 Remaining:
 
 - [ ] Add profile manifest metadata once profile manifests exist.
-- [ ] Align IDA batch compare artifacts with the shared bundle schema where
-  practical.
 
 ### Current Evidence
 
@@ -331,14 +331,16 @@ Remaining:
   artifacts, keeps its `.ida-free-summary.json` compatibility filename, and
   adds the run manifest.
 - `pseudoforge_implementation_status.md` records the shared export parity update
-  and the remaining module split/profile manifest/batch compare follow-ups.
+  and the remaining profile manifest follow-up.
+- IDA batch compare records preserve legacy path fields and now include an
+  `artifacts` map with shared export key names.
 
-### Problem
+### Current Gap
 
-Interactive IDA export is the higher-trust workflow because it has live Hex-Rays
-context, but its artifact set is thinner than the IDA Free CLI path. Review,
-regression, and audit work should have the same raw/cleaned/diff/summary shape
-regardless of entrypoint.
+Interactive IDA export, offline CLI, IDA Free CLI, and IDA batch compare records
+now expose the shared raw/cleaned/diff artifact shape where practical. The
+remaining export metadata gap is profile manifest reporting once profile
+manifests exist.
 
 ### Plan
 
