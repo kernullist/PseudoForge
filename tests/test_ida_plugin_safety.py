@@ -15,6 +15,7 @@ from ida_pseudoforge.core.plan_schema import (
 from ida_pseudoforge.ida import actions as actions_module
 from ida_pseudoforge.ida import apply_changes as apply_module
 from ida_pseudoforge.ida import async_runner
+from ida_pseudoforge.ida import decompiler as decompiler_module
 from ida_pseudoforge.ida import llm_config_dialog
 from ida_pseudoforge.ida import plugin as plugin_module
 from ida_pseudoforge.ida import ui_preview as ui_preview_module
@@ -263,6 +264,96 @@ class IdaPluginSafetyTests(unittest.TestCase):
 
         self.assertEqual([rename.old for rename in accepted], ["v1"])
         self.assertEqual(rejected, [])
+
+    def test_decompiler_lvar_identity_uses_stable_stack_location_anchor(self):
+        class FakeLocation:
+            def get_stkoff(self):
+                return -16
+
+            def __str__(self):
+                return "<ida_hexrays.lvar_locator_t object at 0x1234>"
+
+        class FakeLvar:
+            name = "v1"
+            type = "int"
+            location = FakeLocation()
+
+            def is_arg_var(self):
+                return False
+
+        class FakeCfunc:
+            lvars = [FakeLvar()]
+
+        lvars = decompiler_module._extract_lvars_from_cfunc(FakeCfunc())
+
+        expected_identity = make_lvar_identity("v1", "int", False, 0, "stkoff:-16")
+        self.assertEqual(len(lvars), 1)
+        self.assertEqual(lvars[0].location, "stkoff:-16")
+        self.assertEqual(lvars[0].identity, expected_identity)
+
+    def test_decompiler_lvar_location_falls_back_to_lvar_scalar_anchor(self):
+        class FakeLocation:
+            def __str__(self):
+                return "<ida_hexrays.lvar_locator_t object at 0x1234>"
+
+        class FakeLvar:
+            name = "v1"
+            type = "int"
+            location = FakeLocation()
+
+            def is_arg_var(self):
+                return False
+
+            def get_reg(self):
+                return 3
+
+        class FakeCfunc:
+            lvars = [FakeLvar()]
+
+        lvars = decompiler_module._extract_lvars_from_cfunc(FakeCfunc())
+
+        self.assertEqual(len(lvars), 1)
+        self.assertEqual(lvars[0].location, "reg:3")
+
+    def test_decompiler_lvar_location_ignores_unstable_object_address_text(self):
+        class FakeLocation:
+            def __str__(self):
+                return "<ida_hexrays.lvar_locator_t object at 0x1234>"
+
+        class FakeLvar:
+            name = "v1"
+            type = "int"
+            location = FakeLocation()
+
+            def is_arg_var(self):
+                return False
+
+        class FakeCfunc:
+            lvars = [FakeLvar()]
+
+        lvars = decompiler_module._extract_lvars_from_cfunc(FakeCfunc())
+
+        self.assertEqual(len(lvars), 1)
+        self.assertEqual(lvars[0].location, "")
+
+    def test_decompiler_lvar_location_formats_definition_ea_anchor(self):
+        class FakeLvar:
+            name = "v1"
+            type = "int"
+
+            def is_arg_var(self):
+                return False
+
+            def get_defea(self):
+                return 0x140001020
+
+        class FakeCfunc:
+            lvars = [FakeLvar()]
+
+        lvars = decompiler_module._extract_lvars_from_cfunc(FakeCfunc())
+
+        self.assertEqual(len(lvars), 1)
+        self.assertEqual(lvars[0].location, "defea:0x140001020")
 
     def test_apply_calls_rename_lvar_only_after_preflight_passes(self):
         capture = _capture()

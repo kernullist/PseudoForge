@@ -153,7 +153,7 @@ Implemented:
 Still pending:
 
 1. Full switch body reconstruction for shared and fallthrough branches.
-2. Ctree-identity based local variable rename tracking beyond the current session and preflight gates.
+2. Manual IDA validation and true object-level ctree rename application beyond the current identity preflight gates.
 3. Richer dockable side-by-side preview panel.
 4. Deterministic rule phase expansion for `call_arg_rewrite`, `text_rewrite`, and `flow`.
 5. Wider profile coverage from real target builds.
@@ -1492,6 +1492,6 @@ Rename application fails:
 
 1. Design deterministic rules matching engine v2 scope and migrate `call_arg_rewrite`, `text_rewrite`, and `flow`.
 2. Improve shared and fallthrough branch body reconstruction.
-3. Strengthen ctree-identity based rename tracking.
+3. Manually validate identity-backed rename tracking and investigate true object-level ctree rename application.
 4. Implement a dockable side-by-side preview panel.
 5. Expand profile coverage against real target builds.

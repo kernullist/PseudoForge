@@ -485,10 +485,12 @@ P0 rename identity hardening update:
   `ida_hexrays.rename_lvar()` and rejects same-name/different-identity drift.
 - Identity-backed IDA apply is refused if the current lvar identity cannot be
   re-read before the write.
+- Lvar location capture now prefers stable stack offset, register, definition
+  EA/block, and locator text anchors while ignoring object-address strings.
 - Legacy name-based preflight remains available when identity metadata is not
   present, preserving offline and older-capture behavior.
 - Focused safety tests cover identity match, identity drift rejection, and
-  legacy fallback.
+  legacy fallback plus enriched location anchor extraction.
 
 The current implementation state reflects the `NtSetSystemInformation` and `NtSetInformationProcess` large-dispatcher regression pass:
 
@@ -1127,7 +1129,8 @@ implemented:
 
 deferred:
 - Full non-blocking LLM model discovery UI refresh is still deferred; current behavior keeps the existing dialog flow with safer fallback handling.
-- Ctree identity tracking is still incomplete; apply continues to call ida_hexrays.rename_lvar(function_ea, old, new) after the new session and preflight gates pass.
+- True object-level ctree rename application is still incomplete; apply continues to call ida_hexrays.rename_lvar(function_ea, old, new) after the new session and identity preflight gates pass.
+- Manual IDA validation of identity-backed apply after local type/name refresh is still pending.
 - Interactive export now shares raw pseudocode, warnings JSON, raw-vs-cleaned diff, and summary JSON artifacts with the CLI paths; only IDA Free CLI-specific run manifest output remains separate.
 ```
 
@@ -1158,14 +1161,17 @@ Keep LLM path enabled with -LlmProvider codex_cli -LlmModel gpt-5.5.
 3. IDA-side preview uses a simple text preview window.
    - A richer dockable side-by-side panel is still pending.
 
-4. Ctree identity tracking is not complete.
-   - IDA apply currently uses `ida_hexrays.rename_lvar(function_ea, old, new)`.
+4. True object-level ctree rename application is not complete.
+   - IDA apply currently uses `ida_hexrays.rename_lvar(function_ea, old, new)`
+     after identity-aware preflight passes.
+   - Manual IDA validation of enriched lvar anchors is still pending.
 
 ## Next Steps
 
 1. Extend deterministic rules matching engine beyond v1 with `call_arg_rewrite`, `text_rewrite`, and `flow` phases.
 2. Improve switch body reconstruction for shared/fallthrough branch paths.
 3. Add a richer dockable side-by-side preview panel.
-4. Add ctree identity tracking for safer local variable rename application.
-5. Align interactive export artifacts with the IDA Free CLI output set where useful.
+4. Manually validate identity-backed local variable rename application inside
+   IDA after local type/name refresh.
+5. Move remaining shared test helpers into `tests/fixtures/` or `tests/helpers.py`.
 6. Expand semantic overlays for more WDK APIs beyond the currently known pool/list/resource cases.

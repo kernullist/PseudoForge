@@ -57,22 +57,26 @@ Completed:
   re-read before the write.
 - [x] Preserved legacy name-based fallback when identity metadata is unavailable.
 - [x] Added focused tests for identity match, identity drift, and legacy fallback.
+- [x] Added richer IDA lvar location anchor extraction for stable stack offset,
+  register, definition EA/block, and locator text surfaces while ignoring object-
+  address strings.
 
 Remaining:
 
-- [ ] Add richer ctree location anchors if a stable Hex-Rays API surface is
-  mapped and tested.
 - [ ] Validate the identity-backed apply path manually inside IDA after a local
   type/name refresh.
 
 ### Current Evidence
 
-- `pseudoforge_implementation_status.md` lists ctree identity tracking as a known
-  incomplete area.
+- `pseudoforge_implementation_status.md` lists true object-level ctree rename
+  application and manual IDA validation as known incomplete areas.
 - `ida_pseudoforge/core/lvar_analysis.py:35` builds a `CleanPlan` from text
   captures and rename suggestions.
 - `ida_pseudoforge/core/validation.py:148` validates rename candidates by known
   names, collisions, identifier shape, and LLM-specific heuristics.
+- `ida_pseudoforge/ida/decompiler.py` now extracts optional lvar identity
+  anchors from stable stack offset, register, definition EA/block, and locator
+  text surfaces.
 - `ida_pseudoforge/ida/apply_changes.py` performs final apply preflight, but the
   final IDA write still depends on the old local name string reaching
   `ida_hexrays.rename_lvar()`.

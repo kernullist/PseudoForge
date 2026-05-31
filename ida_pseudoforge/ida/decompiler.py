@@ -19,6 +19,25 @@ except Exception:
     idaapi = None
 
 
+_LVAR_LOCATION_SCALAR_MEMBERS = (
+    ("stkoff", "stkoff"),
+    ("get_stkoff", "stkoff"),
+    ("reg", "reg"),
+    ("get_reg", "reg"),
+    ("ea", "ea"),
+    ("get_ea", "ea"),
+    ("defea", "defea"),
+    ("get_defea", "defea"),
+    ("defblk", "defblk"),
+    ("get_defblk", "defblk"),
+)
+
+_LVAR_LOCATION_TEXT_MEMBERS = (
+    "dstr",
+    "print",
+)
+
+
 def hexrays_available() -> bool:
     if ida_hexrays is None:
         return False
@@ -207,16 +226,70 @@ def _extract_lvars_from_cfunc(cfunc: Any) -> list[LocalVariable]:
 
 def _extract_lvar_location(lvar: Any) -> str:
     for attr in ("location", "loc", "lvloc"):
-        value = getattr(lvar, attr, None)
-        if callable(value):
-            try:
-                value = value()
-            except Exception:
-                continue
-        text = _stable_identity_text(value)
+        value = _read_zero_arg_member(lvar, attr)
+        text = _stable_lvar_location_anchor(value)
         if text:
             return text
+    text = _stable_lvar_location_anchor(lvar, allow_direct_object_text=False)
+    if text:
+        return text
     return ""
+
+
+def _stable_lvar_location_anchor(value: Any, *, allow_direct_object_text: bool = True) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, bool)):
+        return _stable_identity_text(value)
+
+    for member, label in _LVAR_LOCATION_SCALAR_MEMBERS:
+        text = _format_location_scalar(label, _read_zero_arg_member(value, member))
+        if text:
+            return text
+
+    for member in _LVAR_LOCATION_TEXT_MEMBERS:
+        text = _stable_identity_text(_read_zero_arg_member(value, member))
+        if text:
+            return text
+
+    if allow_direct_object_text:
+        return _stable_identity_text(value)
+    return ""
+
+
+def _read_zero_arg_member(owner: Any, member: str) -> Any:
+    try:
+        value = getattr(owner, member, None)
+    except Exception:
+        return None
+    if not callable(value):
+        return value
+    try:
+        return value()
+    except Exception:
+        return None
+
+
+def _format_location_scalar(label: str, value: Any) -> str:
+    if value is None or isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        number = value
+    else:
+        try:
+            number = int(str(value), 0)
+        except Exception:
+            text = _stable_identity_text(value)
+            if not text:
+                return ""
+            return "%s:%s" % (label, text)
+
+    if label in ("ea", "defea"):
+        if number in (-1, 0xFFFFFFFF, 0xFFFFFFFFFFFFFFFF):
+            return ""
+        if number >= 0:
+            return "%s:0x%X" % (label, number)
+    return "%s:%d" % (label, number)
 
 
 def _stable_identity_text(value: Any) -> str:
