@@ -417,6 +417,9 @@ P2 switch body reporting update:
   command-template migration regressions now live in `tests/test_llm_config.py`.
 - Kernel API profile rewrite, alias lookup, WDK parser, and profile semantics
   regressions now live in `tests/test_kernel_api_profile_builder.py`.
+- IOCTL/IRP dispatch, stack-location union-arm gating, buffered SystemBuffer,
+  completion-tail, warning suppression, and CTL_CODE literal regressions now
+  live in `tests/test_render_ioctl.py`.
 
 P0 rename identity hardening update:
 
@@ -700,7 +703,7 @@ python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInform
 IRP dispatch renderer extraction validation:
 
 ```text
-python -B -m unittest tests.test_render_ioctl tests.test_render_snapshots tests.test_core_engine.CoreEngineTests.test_ioctl_switch_case_labels_decode_ctl_code_bitfields tests.test_core_engine.CoreEngineTests.test_no_pdb_ioctl_dispatch_uses_body_evidence_for_irp_and_stack_roles tests.test_core_engine.CoreEngineTests.test_no_pdb_create_close_dispatch_uses_completion_call_evidence_for_irp tests.test_core_engine.CoreEngineTests.test_irp_completion_helper_is_not_promoted_to_driver_dispatch tests.test_core_engine.CoreEngineTests.test_ioctl_stack_location_rewrite_does_not_require_device_extension_use tests.test_core_engine.CoreEngineTests.test_irp_stack_location_union_arm_is_not_forced_without_ioctl_evidence tests.test_core_engine.CoreEngineTests.test_irp_stack_location_roles_require_driver_dispatch_evidence tests.test_core_engine.CoreEngineTests.test_llm_ioctl_like_names_do_not_force_irp_union_arm_without_dispatch_evidence tests.test_core_engine.CoreEngineTests.test_master_irp_alias_rewrite_requires_all_buffered_ioctl_cases tests.test_core_engine.CoreEngineTests.test_master_irp_alias_rewrite_requires_device_control_stack_evidence -v: 17 tests OK
+python -B -m unittest tests.test_render_ioctl tests.test_render_snapshots -v: 21 tests OK
 python -B -m unittest discover -s tests -v: 231 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 git diff --check -- .: passed
@@ -733,7 +736,7 @@ python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInform
 Warning renderer extraction validation:
 
 ```text
-python -B -m unittest tests.test_render_warnings tests.test_render_snapshots tests.test_export_bundle tests.test_core_engine.CoreEngineTests.test_irp_completion_label_and_resolved_ioctl_warnings_are_display_clean tests.test_llm_config.LlmConfigTests.test_large_dispatcher_llm_raises_confidence_floor_and_hides_low_confidence_warnings -v: 9 tests OK
+python -B -m unittest tests.test_render_warnings tests.test_render_snapshots tests.test_export_bundle tests.test_render_ioctl.RenderIoctlTests.test_irp_completion_label_and_resolved_ioctl_warnings_are_display_clean tests.test_llm_config.LlmConfigTests.test_large_dispatcher_llm_raises_confidence_floor_and_hides_low_confidence_warnings -v: 9 tests OK
 python -B -m unittest discover -s tests -v: 240 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 git diff --check -- .: passed
@@ -788,7 +791,7 @@ python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInform
 Signature renderer extraction validation:
 
 ```text
-python -B -m unittest tests.test_render_signatures tests.test_render_callbacks tests.test_render_driver_entry tests.test_render_ioctl tests.test_render_ntset tests.test_render_zw tests.test_core_engine.CoreEngineTests.test_known_pvoid_signature_keeps_typed_body_alias tests.test_core_engine.CoreEngineTests.test_no_pdb_create_close_dispatch_uses_completion_call_evidence_for_irp -v: 21 tests OK
+python -B -m unittest tests.test_render_signatures tests.test_render_callbacks tests.test_render_driver_entry tests.test_render_ioctl tests.test_render_ntset tests.test_render_zw tests.test_core_engine.CoreEngineTests.test_known_pvoid_signature_keeps_typed_body_alias tests.test_render_ioctl.RenderIoctlTests.test_no_pdb_create_close_dispatch_uses_completion_call_evidence_for_irp -v: 21 tests OK
 python -B -m unittest discover -s tests -v: 254 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 git diff --check -- .: passed
@@ -807,12 +810,21 @@ python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation
 python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_header_extract_smoke --format json --no-progress: succeeded
 ```
 
+IOCTL/IRP test-suite split validation:
+
+```text
+python -B -m unittest tests.test_render_ioctl tests.test_render_snapshots tests.test_core_engine -v: 66 tests OK
+python -B -m unittest discover -s tests -v: 265 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+```
+
 DriverEntry cleanup regression validation:
 
 ```text
-python -B -m unittest tests.test_core_engine.CoreEngineTests.test_callback_registration_toggle_rewrites_ob_operation_registration tests.test_core_engine.CoreEngineTests.test_registry_callback_registration_probe_gets_cm_semantics tests.test_core_engine.CoreEngineTests.test_memory_manager_probe_gets_mm_semantics tests.test_core_engine.CoreEngineTests.test_zw_api_probe_gets_deterministic_names_and_status_checks tests.test_core_engine.CoreEngineTests.test_driver_entry_device_extension_semantics tests.test_core_engine.CoreEngineTests.test_ioctl_switch_case_labels_decode_ctl_code_bitfields tests.test_kernel_api_profile_builder.KernelApiProfileBuilderTests.test_kernel_api_profile_rewrites_pool_flags_and_tags -v: 7 tests OK
+python -B -m unittest tests.test_core_engine.CoreEngineTests.test_callback_registration_toggle_rewrites_ob_operation_registration tests.test_core_engine.CoreEngineTests.test_registry_callback_registration_probe_gets_cm_semantics tests.test_core_engine.CoreEngineTests.test_memory_manager_probe_gets_mm_semantics tests.test_core_engine.CoreEngineTests.test_zw_api_probe_gets_deterministic_names_and_status_checks tests.test_core_engine.CoreEngineTests.test_driver_entry_device_extension_semantics tests.test_render_ioctl.RenderIoctlTests.test_ioctl_switch_case_labels_decode_ctl_code_bitfields tests.test_kernel_api_profile_builder.KernelApiProfileBuilderTests.test_kernel_api_profile_rewrites_pool_flags_and_tags -v: 7 tests OK
 python -B -m unittest tests.test_core_engine.CoreEngineTests.test_driver_entry_device_extension_semantics tests.test_core_engine.CoreEngineTests.test_driver_entry_extension_rewrite_requires_dword_scaled_offsets -v: 2 tests OK
-python -B -m unittest tests.test_core_engine.CoreEngineTests.test_ioctl_switch_case_labels_decode_ctl_code_bitfields tests.test_core_engine.CoreEngineTests.test_ioctl_stack_location_rewrite_does_not_require_device_extension_use tests.test_core_engine.CoreEngineTests.test_irp_stack_location_union_arm_is_not_forced_without_ioctl_evidence tests.test_core_engine.CoreEngineTests.test_irp_stack_location_roles_require_driver_dispatch_evidence tests.test_core_engine.CoreEngineTests.test_llm_ioctl_like_names_do_not_force_irp_union_arm_without_dispatch_evidence tests.test_core_engine.CoreEngineTests.test_master_irp_alias_rewrite_requires_all_buffered_ioctl_cases tests.test_core_engine.CoreEngineTests.test_master_irp_alias_rewrite_requires_device_control_stack_evidence tests.test_core_engine.CoreEngineTests.test_ioctl_ctl_code_decode_handles_methods_and_access_bits tests.test_core_engine.CoreEngineTests.test_ioctl_case_labels_decode_hexrays_integer_suffixes -v: 9 tests OK
+python -B -m unittest tests.test_render_ioctl.RenderIoctlTests.test_ioctl_switch_case_labels_decode_ctl_code_bitfields tests.test_render_ioctl.RenderIoctlTests.test_ioctl_stack_location_rewrite_does_not_require_device_extension_use tests.test_render_ioctl.RenderIoctlTests.test_irp_stack_location_union_arm_is_not_forced_without_ioctl_evidence tests.test_render_ioctl.RenderIoctlTests.test_irp_stack_location_roles_require_driver_dispatch_evidence tests.test_render_ioctl.RenderIoctlTests.test_llm_ioctl_like_names_do_not_force_irp_union_arm_without_dispatch_evidence tests.test_render_ioctl.RenderIoctlTests.test_master_irp_alias_rewrite_requires_all_buffered_ioctl_cases tests.test_render_ioctl.RenderIoctlTests.test_master_irp_alias_rewrite_requires_device_control_stack_evidence tests.test_render_ioctl.RenderIoctlTests.test_ioctl_ctl_code_decode_handles_methods_and_access_bits tests.test_render_ioctl.RenderIoctlTests.test_ioctl_case_labels_decode_hexrays_integer_suffixes -v: 9 tests OK
 python -B -m unittest discover -s tests -v: 171 tests OK
 python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
 python -m json.tool .\ida_pseudoforge\profiles\kernel_api_overrides.json > $null: passed

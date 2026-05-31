@@ -12,10 +12,10 @@ from ida_pseudoforge.core.lvar_analysis import build_clean_plan
 from ida_pseudoforge.core.render import render_cleaned_pseudocode
 from tests.test_core_engine import (
     DRIVER_ENTRY_SAMPLE,
-    IOCTL_DISPATCH_SAMPLE,
     SAMPLE,
     SINGLE_LINE_IF_SAMPLE,
 )
+from tests.test_render_ioctl import IOCTL_DISPATCH_SAMPLE
 
 
 SNAPSHOT_DIR = Path(__file__).with_name("snapshots")

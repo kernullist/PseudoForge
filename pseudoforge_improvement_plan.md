@@ -707,6 +707,9 @@ Completed:
   command-template migration regressions into `tests/test_llm_config.py`.
 - [x] Moved kernel API profile rewrite, alias lookup, WDK parser, and profile
   semantics regressions into `tests/test_kernel_api_profile_builder.py`.
+- [x] Moved IOCTL/IRP dispatch, stack-location union-arm gating, buffered
+  SystemBuffer, completion-tail, warning suppression, and CTL_CODE literal
+  regressions into `tests/test_render_ioctl.py`.
 
 Remaining:
 
@@ -717,9 +720,9 @@ Remaining:
 
 ### Current Evidence
 
-- `tests/test_core_engine.py` is about 3470 lines after the focused forge-store,
-  UI preview, RuleContext, rule-pack validator, RuleEngine, and rule
-  integration, IDA batch, LLM config, and kernel profile splits.
+- `tests/test_core_engine.py` is 2612 lines after the focused forge-store,
+  UI preview, RuleContext, rule-pack validator, RuleEngine, rule integration,
+  IDA batch, LLM config, kernel profile, and IOCTL/IRP splits.
 - Status literal rendering coverage now has a focused
   `tests/test_render_status.py` suite.
 - Dispatcher/profile literal coverage now has a focused
@@ -744,6 +747,9 @@ Remaining:
   `tests/test_llm_config.py` suite.
 - Kernel API profile rewrite, alias lookup, WDK parser, and profile semantics
   coverage now lives in `tests/test_kernel_api_profile_builder.py`.
+- IOCTL/IRP dispatch, stack-location, SystemBuffer, completion-tail, warning
+  suppression, and CTL_CODE literal coverage now lives in
+  `tests/test_render_ioctl.py`.
 - The status document already lists the historical monolith as deferred debt.
 - Test coverage is broad but organized mostly by accumulation rather than by
   subsystem.
