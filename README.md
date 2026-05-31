@@ -231,6 +231,7 @@ ida_pseudoforge/
     render_dispatcher.py
     render_driver_entry.py
     render_flow.py
+    render_header.py
     render_ioctl.py
     render_kernel_hints.py
     render_labels.py
@@ -305,6 +306,7 @@ tests/
   test_render_dispatcher.py
   test_render_driver_entry.py
   test_render_flow.py
+  test_render_header.py
   test_render_ioctl.py
   test_render_kernel_hints.py
   test_render_labels.py

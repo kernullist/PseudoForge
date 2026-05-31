@@ -92,6 +92,8 @@ Implemented in this folder:
      `ida_pseudoforge/core/render_call_args.py`
    - known function/callback signature and body routing lives in
      `ida_pseudoforge/core/render_signatures.py`
+   - generated header formatting and kernel semantic rewrite counting live in
+     `ida_pseudoforge/core/render_header.py`
    - `Show current analysis result` displays only the cached current function `.forge` section and does not trigger decompile, LLM, or `.forge` refresh work
    - top-level `Analyzed functions...` action opens a chooser from cached `.forge` section markers instead of opening the full aggregate file
    - switch outline export
@@ -185,6 +187,7 @@ Implemented in this folder:
    - `tests/test_render_dispatcher.py`
    - `tests/test_render_driver_entry.py`
    - `tests/test_render_flow.py`
+   - `tests/test_render_header.py`
    - `tests/test_render_ioctl.py`
    - `tests/test_render_kernel_hints.py`
    - `tests/test_render_labels.py`
@@ -200,7 +203,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 254 unit tests
+   - current suite covers 256 unit tests
 
 ## Latest Implementation Notes
 
@@ -268,6 +271,9 @@ P1 renderer snapshot protection update:
   preserving public private-helper aliases imported through
   `ida_pseudoforge.core.render`; empty capture names now fall back to the
   prototype function name for signature replacement.
+- Generated header formatting and kernel semantic rewrite counting now live in
+  `ida_pseudoforge/core/render_header.py` while preserving the public
+  `ida_pseudoforge.core.render._kernel_semantic_rewrite_count` import path.
 
 P1 profile loader diagnostics update:
 
@@ -733,6 +739,17 @@ python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: pass
 git diff --check -- .: passed
 python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_signatures_extract_smoke: succeeded
 python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_signatures_extract_smoke --format json --no-progress: succeeded
+```
+
+Header renderer extraction validation:
+
+```text
+python -B -m unittest tests.test_render_header tests.test_render_snapshots tests.test_core_engine.CoreEngineTests.test_rendered_comment_text_is_ascii_safe tests.test_core_engine.CoreEngineTests.test_kernel_driver_semantics -v: 5 tests OK
+python -B -m unittest discover -s tests -v: 256 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_header_extract_smoke: succeeded
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_header_extract_smoke --format json --no-progress: succeeded
 ```
 
 DriverEntry cleanup regression validation:

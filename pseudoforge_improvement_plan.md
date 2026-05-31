@@ -181,6 +181,8 @@ Completed:
 - [x] Moved known function/callback signature replacement and
   signature-sensitive body routing into a scoped `render_signatures` module
   while preserving public render imports.
+- [x] Moved generated header formatting and kernel semantic rewrite counting
+  into a scoped `render_header` module while preserving public render imports.
 
 Remaining:
 
@@ -192,10 +194,10 @@ Remaining:
 ### Current Evidence
 
 - `ida_pseudoforge/core/render.py` is the largest production module at roughly
-  266 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
+  182 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
   DriverEntry, callback, IRP dispatch, Zw API, NtSet, warning-display,
-  flow/switch-outline, path-literal, kernel-hint, call-argument, and signature
-  routing extraction slices.
+  flow/switch-outline, path-literal, kernel-hint, call-argument, signature
+  routing, and header extraction slices.
 - `render_cleaned_pseudocode()` still coordinates many ordered text passes in
   `ida_pseudoforge/core/render.py`.
 - `ida_pseudoforge/core/render.py` preserves the public `write_export_bundle`
@@ -225,6 +227,8 @@ Remaining:
   `ida_pseudoforge/core/render_call_args.py`.
 - Known function/callback signature replacement and signature-sensitive body
   routing now live in `ida_pseudoforge/core/render_signatures.py`.
+- Generated header formatting and kernel semantic rewrite counting now live in
+  `ida_pseudoforge/core/render_header.py`.
 
 ### Problem
 
