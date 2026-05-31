@@ -73,6 +73,34 @@ __int64 __fastcall _tlgWriteTemplate_Write(__int64 a1)
 """
 
 
+COMPLETE_BRANCH_SLICE_SAMPLE = r"""
+__int64 __fastcall CompleteBranchSliceDispatcher(int code)
+{
+  int status;
+
+  if ( code == 1 )
+  {
+    status = query_status();
+    status += 1;
+    return status;
+  }
+  if ( code == 2 )
+  {
+    status = -1;
+    goto LABEL_10;
+  }
+  if ( code == 3 )
+  {
+    status = 3;
+  }
+  if ( code == 4 )
+    return 4;
+LABEL_10:
+  return status;
+}
+"""
+
+
 class RenderFlowTests(unittest.TestCase):
     def test_render_ntset_switch_outline_uses_recovered_case_names(self) -> None:
         capture = capture_from_pseudocode(NTSET_SYSTEM_INFORMATION_SAMPLE)
@@ -143,6 +171,26 @@ class RenderFlowTests(unittest.TestCase):
         self.assertIn("complex body not structurally sliced", outline)
         self.assertNotIn("status = -1;", outline)
 
+    def test_branch_slice_helper_expands_only_complete_local_return_branches(self) -> None:
+        capture = capture_from_pseudocode(COMPLETE_BRANCH_SLICE_SAMPLE)
+        plan = build_clean_plan(capture)
+        flow = plan.flow_rewrites[0]
+        outline = render_switch_outline(capture, plan)
+
+        self.assertEqual("complete_branch_slice", flow.case_body_states[1])
+        self.assertEqual("shared_tail", flow.case_body_states[2])
+        self.assertEqual("complex_unsliced", flow.case_body_states[3])
+        self.assertEqual("single_statement_body", flow.case_body_states[4])
+        self.assertIn("// PseudoForge: body_state=complete_branch_slice", outline)
+        self.assertIn("status = query_status();", outline)
+        self.assertIn("status += 1;", outline)
+        self.assertIn("return status;", outline)
+        self.assertIn("// PseudoForge: body_state=shared_tail", outline)
+        self.assertIn("// PseudoForge: body_state=complex_unsliced", outline)
+        self.assertNotIn("goto LABEL_10;", outline)
+        self.assertNotIn("status = -1;", outline)
+        self.assertNotIn("status = 3;", outline)
+
     def test_native_switch_dispatchers_detects_existing_switch(self) -> None:
         flow = FlowRewrite(kind="switch", dispatcher="code", recovered_cases=[1])
         plan = _plan(flow)
@@ -150,6 +198,10 @@ class RenderFlowTests(unittest.TestCase):
         self.assertEqual(native_switch_dispatchers("switch ( (int)code )\n{", plan), {"code"})
         self.assertFalse(is_safe_switch_outline_body(["status = 0;", "break;"]))
         self.assertTrue(is_safe_switch_outline_body(["return STATUS_NOT_SUPPORTED;"]))
+        self.assertFalse(is_safe_switch_outline_body(["returnStatus;"]))
+        self.assertTrue(is_safe_switch_outline_body(["status = query_status();", "return status;"]))
+        self.assertFalse(is_safe_switch_outline_body(["status = query_status();", "status += 1;"]))
+        self.assertFalse(is_safe_switch_outline_body(["return status;", "status = query_status();"]))
 
     def test_switch_outline_omits_goto_dependent_body(self) -> None:
         self.assertFalse(

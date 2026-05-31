@@ -356,9 +356,35 @@ def _case_body_state(body: list[str] | None) -> str:
         return "fallthrough_or_join"
     if any(_goto_label_from_line(line) for line in statements):
         return "shared_tail"
-    if len(statements) == 1 and statements[0].startswith("return ") and statements[0].endswith(";"):
+    if len(statements) == 1 and (statements[0].startswith("return ") or statements[0] == "return;"):
         return "single_statement_body"
+    if _is_complete_branch_slice(statements):
+        return "complete_branch_slice"
     return "complex_unsliced"
+
+
+def _is_complete_branch_slice(statements: list[str]) -> bool:
+    if len(statements) < 2:
+        return False
+    for line in statements:
+        stripped = line.strip()
+        if stripped in {"{", "}"}:
+            return False
+        if stripped.endswith(":"):
+            return False
+        if _goto_label_from_line(stripped):
+            return False
+        if stripped.startswith(("if ", "else", "for ", "while ", "do", "switch ")):
+            return False
+        if not stripped.endswith(";"):
+            return False
+    final_statement = statements[-1]
+    if not (final_statement.startswith("return ") or final_statement == "return;"):
+        return False
+    return not any(
+        line.startswith(("return ", "return;", "break;", "continue;"))
+        for line in statements[:-1]
+    )
 
 
 def _case_labels(case_bodies: dict[int, list[str]]) -> dict[int, str]:

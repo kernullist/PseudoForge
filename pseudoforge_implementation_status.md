@@ -421,11 +421,13 @@ P2 RuleContext call-site facts update:
 P2 switch body reporting update:
 
 - Recovered switch cases now carry explicit body states:
-  `single_statement_body`, `shared_tail`, `fallthrough_or_join`, and
-  `complex_unsliced`.
+  `single_statement_body`, `complete_branch_slice`, `shared_tail`,
+  `fallthrough_or_join`, and `complex_unsliced`.
 - Switch outlines and flow reports include source line anchors and shared-tail
   labels when available, while still refusing to expand goto-dependent shared
   tails as unique case bodies.
+- Complete local branch slices are expanded only when their simple statements
+  end in a local return and contain no labels, gotos, or nested control flow.
 - Native switch recovery now handles `switch (...) {` brace placement on the
   switch line and has regression coverage for fallthrough cases plus nested
   switch cases that must not be promoted to the parent dispatcher.
@@ -490,7 +492,9 @@ The current implementation state reflects the `NtSetSystemInformation` and `NtSe
 - `SYSTEM_INFORMATION_CLASS` literal and delta-chain rewrites are profile-backed, including chained temporaries such as `v86 = v85 - 8` when the rewrite is still structurally tied to the original dispatcher comparison.
 - `NtSetInformationProcess` preview now uses the canonical native API signature with `PROCESSINFOCLASS processInformationClass` and rewrites process-info-class case labels/comparisons through the 25H2 profile.
 - Casted native switches such as `switch ((int)a2)` are recognized as native dispatchers, so length/alignment comparisons on `ProcessInformationLength` are not promoted into auxiliary switch recovery.
-- Switch outline generation is intentionally conservative: only single-statement return bodies are expanded, while complex or shared branch bodies point back to the normalized original pseudocode.
+- Switch outline generation is intentionally conservative: only single-statement
+  returns and complete local branch slices are expanded, while complex or shared
+  branch bodies point back to the normalized original pseudocode.
 - TraceLogging/C++ template wrapper functions are excluded from switch recovery to avoid mapping wrapper size constants onto unrelated `SYSTEM_INFORMATION_CLASS` names.
 - The matching TraceLogging switch false-positive regression now lives in `tests/test_render_flow.py`.
 - Direct `return 0` becomes `STATUS_SUCCESS` only when the function has strong NTSTATUS return evidence; mixed error-code helpers with decompiler `__int64`/`char` return types keep raw zero returns.
@@ -616,7 +620,9 @@ The `.forge` file is sectioned by function EA. Re-analyzing one function replace
 <function>.rule-report.json
 ```
 
-`switch-outline.cpp` now includes only single-statement safe bodies. Complex dispatcher paths remain in the normalized original pseudocode.
+`switch-outline.cpp` now includes only single-statement returns and complete
+local branch slices. Complex dispatcher paths remain in the normalized original
+pseudocode.
 
 ## Current Validation Run
 

@@ -624,33 +624,34 @@ duplicate parsing bugs.
 
 ## P2: Conservative Switch Body Reconstruction
 
-Status: In progress.
+Status: Completed.
 
 Completed:
 
 - [x] Added explicit recovered case body states:
-  `single_statement_body`, `shared_tail`, `fallthrough_or_join`, and
-  `complex_unsliced`.
+  `single_statement_body`, `complete_branch_slice`, `shared_tail`,
+  `fallthrough_or_join`, and `complex_unsliced`.
 - [x] Added source line anchors and shared-tail labels to switch outlines and
   flow reports.
 - [x] Added regression coverage for shared cleanup tails without expanding them
   as unique case bodies.
 - [x] Added regression coverage for fallthrough and nested native switches,
   including same-line switch brace placement.
-
-Remaining:
-
-- [ ] Add branch-slice helper that only extracts bodies when all exits and joins
-  are represented.
+- [x] Added a branch-slice helper that expands only complete local branch
+  slices ending in a local return while rejecting labels, gotos, nested control
+  flow, shared tails, and partial bodies.
 
 ### Current Evidence
 
-- README and status docs both list full switch body reconstruction for shared
-  and fallthrough branches as pending.
+- Full reconstruction for shared and fallthrough branches remains out of scope
+  for the safe outline path; those bodies stay anchored to the normalized
+  original pseudocode.
 - `render_switch_outline()` intentionally expands only safe bodies and points
   complex cases back to normalized original pseudocode.
 - `render_flow_report()` now maps cases to body state, source line anchor, and
   shared-tail label when available.
+- `complete_branch_slice` is emitted only for simple local branch bodies that
+  end in `return`; shared tails and partial branch slices stay unexpanded.
 
 ### Problem
 
@@ -662,6 +663,7 @@ cases share labels, cleanup tails, or fallthrough-like paths.
 
 1. Represent recovered cases with explicit body states:
    - `single_statement_body`
+   - `complete_branch_slice`
    - `shared_tail`
    - `fallthrough_or_join`
    - `complex_unsliced`
