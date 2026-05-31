@@ -174,6 +174,7 @@ Implemented in this folder:
    - `tests/test_render_callbacks.py`
    - `tests/test_render_dispatcher.py`
    - `tests/test_render_driver_entry.py`
+   - `tests/test_render_flow.py`
    - `tests/test_render_ioctl.py`
    - `tests/test_render_labels.py`
    - `tests/test_render_ntset.py`
@@ -186,7 +187,7 @@ Implemented in this folder:
    - `tests/test_pseudoforge_free_cli.py`
    - `tests/test_release_pseudoforge.py`
    - renderer golden snapshots under `tests/snapshots`
-   - current suite covers 240 unit tests
+   - current suite covers 243 unit tests
 
 ## Latest Implementation Notes
 
@@ -233,6 +234,11 @@ P1 renderer snapshot protection update:
 - Warning formatting, warning ranking, and display-only suppression filters now
   live in `ida_pseudoforge/core/render_warnings.py` while preserving the public
   `ida_pseudoforge.core.render.display_warning_count` import path.
+- Flow report and conservative switch outline rendering now live in
+  `ida_pseudoforge/core/render_flow.py` while preserving the public
+  `ida_pseudoforge.core.render.render_flow_report`,
+  `ida_pseudoforge.core.render.render_switch_outline`, and
+  `_is_safe_switch_outline_body` import paths.
 
 P1 profile loader diagnostics update:
 
@@ -643,6 +649,17 @@ python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: pass
 git diff --check -- .: passed
 python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_warnings_extract_smoke: succeeded
 python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_warnings_extract_smoke --format json --no-progress: succeeded
+```
+
+Flow renderer extraction validation:
+
+```text
+python -B -m unittest tests.test_render_flow tests.test_core_engine.CoreEngineTests.test_render_switch_outline tests.test_core_engine.CoreEngineTests.test_switch_outline_reports_case_body_states_and_anchors tests.test_core_engine.CoreEngineTests.test_native_switch_outline_is_suppressed tests.test_core_engine.CoreEngineTests.test_switch_outline_omits_goto_dependent_body tests.test_export_bundle -v: 10 tests OK
+python -B -m unittest discover -s tests -v: 243 tests OK
+python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+git diff --check -- .: passed
+python -B .\tools\pseudoforge_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_cli_flow_extract_smoke: succeeded
+python -B .\tools\pseudoforge_free_cli.py .\samples\pseudocode\NtSetSystemInformation_switch_renamed.cpp --out $env:TEMP\pseudoforge_free_cli_flow_extract_smoke --format json --no-progress: succeeded
 ```
 
 DriverEntry cleanup regression validation:

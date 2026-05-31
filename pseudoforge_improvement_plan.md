@@ -169,6 +169,8 @@ Completed:
   recovery into a scoped `render_ntset` module.
 - [x] Moved warning formatting, ranking, and display-only suppression filters
   into a scoped `render_warnings` module while preserving public render imports.
+- [x] Moved flow report and conservative switch outline rendering into a scoped
+  `render_flow` module while preserving public render imports.
 
 Remaining:
 
@@ -180,9 +182,9 @@ Remaining:
 ### Current Evidence
 
 - `ida_pseudoforge/core/render.py` is the largest production module at roughly
-  770 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
-  DriverEntry, callback, IRP dispatch, Zw API, NtSet, and warning-display
-  extraction slices.
+  560 lines after the status, style, dispatcher, IOCTL/IRP, semantic-label,
+  DriverEntry, callback, IRP dispatch, Zw API, NtSet, warning-display, and
+  flow/switch-outline extraction slices.
 - `render_cleaned_pseudocode()` still coordinates many ordered text passes in
   `ida_pseudoforge/core/render.py`.
 - `ida_pseudoforge/core/render.py` preserves the public `write_export_bundle`
@@ -202,6 +204,8 @@ Remaining:
   and `NtSetSystemInformation` body rendering now lives in
   `ida_pseudoforge/core/render_ntset.py`; warning formatting/ranking/filtering
   now lives in `ida_pseudoforge/core/render_warnings.py`.
+- Flow report and conservative switch outline rendering now live in
+  `ida_pseudoforge/core/render_flow.py`.
 
 ### Problem
 

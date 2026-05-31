@@ -5,10 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ida_pseudoforge.core.api_semantics import FUNCTION_SIGNATURE_OVERRIDES
-from ida_pseudoforge.core.ioctl import (
-    format_ctl_code,
-    looks_like_ioctl_dispatcher_name,
-)
 from ida_pseudoforge.core.kernel_api import apply_kernel_api_rewrites, kernel_api_prelude
 from ida_pseudoforge.core.kernel_rewrites import apply_kernel_rewrites, apply_known_kernel_struct_rewrites
 from ida_pseudoforge.core.kernel_semantics import (
@@ -19,7 +15,7 @@ from ida_pseudoforge.core.kernel_semantics import (
     looks_like_zw_api_probe,
 )
 from ida_pseudoforge.core.normalize import extract_parameters_from_signature, safe_identifier_replace
-from ida_pseudoforge.core.plan_schema import CleanPlan, FlowRewrite, FunctionCapture
+from ida_pseudoforge.core.plan_schema import CleanPlan, FunctionCapture
 from ida_pseudoforge.core.render_callbacks import (
     apply_known_callback_signature as _apply_known_callback_signature_impl,
     normalize_callback_registration_toggle_body as _normalize_callback_registration_toggle_body,
@@ -33,6 +29,13 @@ from ida_pseudoforge.core.render_dispatcher import (
 from ida_pseudoforge.core.render_driver_entry import (
     driver_entry_signature_override as _driver_entry_signature_override,
     normalize_driver_entry_body as _normalize_driver_entry_body,
+)
+from ida_pseudoforge.core.render_flow import (
+    format_flow_case_value as _format_flow_case_value,
+    is_safe_switch_outline_body as _is_safe_switch_outline_body,
+    native_switch_dispatchers as _native_switch_dispatchers,
+    render_flow_report,
+    render_switch_outline as _render_switch_outline_impl,
 )
 from ida_pseudoforge.core.render_ioctl import (
     annotate_ioctl_code_switch_cases as _annotate_ioctl_code_switch_cases,
@@ -66,7 +69,6 @@ from ida_pseudoforge.core.render_warnings import (
     format_warning as _format_warning,
 )
 from ida_pseudoforge.core.render_zw import normalize_zw_api_probe_body as _normalize_zw_api_probe_body
-from ida_pseudoforge.profiles.loader import profile_load_warnings
 from ida_pseudoforge.version import VERSION
 
 
@@ -214,73 +216,6 @@ def _finalize_rendered_c_like_text(text: str) -> str:
     return _escape_path_like_string_literals(text)
 
 
-def _format_flow_case_value(flow: FlowRewrite, value: int) -> str:
-    if looks_like_ioctl_dispatcher_name(flow.dispatcher):
-        decoded = format_ctl_code(value)
-        if decoded:
-            return "0x%X" % value
-    return str(value)
-
-
-def render_flow_report(capture: FunctionCapture, plan: CleanPlan) -> str:
-    lines = [
-        f"# Flow Report: {capture.name}",
-        "",
-        f"- EA: 0x{capture.ea:X}",
-        f"- Fingerprint: `{plan.input_fingerprint}`",
-        "",
-    ]
-
-    if not plan.flow_rewrites:
-        lines.append("No switch-style dispatcher was recovered.")
-    else:
-        for flow in plan.flow_rewrites:
-            lines.extend(
-                [
-                    f"## {flow.kind}",
-                    "",
-                    f"- Dispatcher: `{flow.dispatcher}`",
-                    f"- Confidence: `{flow.confidence:.2f}`",
-                    f"- Export only: `{flow.export_only}`",
-                    f"- Evidence: {flow.evidence}",
-                    "",
-                    "Recovered cases:",
-                    "",
-                ]
-            )
-            for value in flow.recovered_cases:
-                name = flow.case_names.get(value, "")
-                suffix = f" `{name}`" if name else ""
-                details = [f"body_state=`{_flow_case_body_state(flow, value)}`"]
-                if value in flow.case_anchors:
-                    details.append(f"source_line=`{flow.case_anchors[value]}`")
-                if flow.case_labels.get(value):
-                    details.append(f"label=`{flow.case_labels[value]}`")
-                lines.append(f"- `{value}`{suffix} ({', '.join(details)})")
-            lines.append("")
-
-    if plan.cleanup_labels:
-        lines.extend(["## Cleanup Labels", ""])
-        semantic_label_map = _semantic_label_map(plan)
-        for label in plan.cleanup_labels:
-            display_label = _semantic_label_display(label.label, label.classification, semantic_label_map)
-            lines.append(
-                f"- `{display_label}` lines {label.start_line}-{label.end_line}: "
-                f"`{label.classification}` confidence `{label.confidence:.2f}`"
-            )
-            lines.append(f"  - {label.evidence}")
-        lines.append("")
-
-    report_warnings = list(plan.warnings) + profile_load_warnings()
-    if report_warnings:
-        lines.extend(["## Warnings", ""])
-        for warning in report_warnings:
-            lines.append(f"- {_format_warning(warning)}")
-        lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
-
-
 def write_export_bundle(
     output_dir: str | Path,
     capture: FunctionCapture,
@@ -304,104 +239,7 @@ def render_switch_outline(
     plan: CleanPlan,
     rendered_text: str | None = None,
 ) -> str:
-    lines = [
-        "/*",
-        "    Generated by PseudoForge.",
-        f"    Version: {VERSION}",
-        "    This outline shows recovered dispatcher case values and conservative case bodies.",
-        "    Only single-statement safe bodies are expanded here; complex bodies remain in the normalized original pseudocode.",
-        "    Native switch bodies already present in the normalized original are not duplicated here.",
-        "*/",
-        "",
-    ]
-
-    if not plan.flow_rewrites:
-        lines.append("// No switch-style dispatcher was recovered.")
-        return _finalize_rendered_c_like_text("\n".join(lines) + "\n")
-
-    native_switch_text = rendered_text
-    if native_switch_text is None:
-        rename_map = {item.old: item.new for item in plan.renames if item.apply}
-        native_switch_text = safe_identifier_replace(capture.pseudocode, rename_map)
-
-    for flow in plan.flow_rewrites:
-        if _has_native_switch_for_flow(native_switch_text, flow):
-            lines.append(
-                f"// Native switch ({flow.dispatcher}) already exists in the normalized original pseudocode."
-            )
-            lines.append("// Auxiliary outline suppressed to avoid duplicating incomplete case bodies.")
-            lines.append("")
-            continue
-        lines.append(f"switch ({flow.dispatcher})")
-        lines.append("{")
-        for value in flow.recovered_cases:
-            name = flow.case_names.get(value, "")
-            if name:
-                lines.append(f"// {name}")
-            lines.append(_format_switch_outline_case_label(flow, value))
-            lines.append("{")
-            lines.extend(_switch_outline_case_metadata_lines(flow, value))
-            body = flow.case_bodies.get(value, [])
-            if body:
-                rendered_body = _render_case_body_lines(body, capture, plan)
-                for body_line in rendered_body:
-                    lines.append(f"    {body_line}")
-                if not _body_exits(rendered_body):
-                    lines.append("    break;")
-            else:
-                lines.append("    // PseudoForge: complex body not structurally sliced; review normalized original pseudocode.")
-                lines.append("    break;")
-            lines.append("}")
-        lines.append("default:")
-        lines.append("{")
-        lines.append("    // Original default/error path should be reviewed manually.")
-        lines.append("    break;")
-        lines.append("}")
-        lines.append("}")
-        lines.append("")
-
-    return _finalize_rendered_c_like_text("\n".join(lines).rstrip() + "\n")
-
-
-def _switch_outline_case_metadata_lines(flow: FlowRewrite, value: int) -> list[str]:
-    details = [f"body_state={_flow_case_body_state(flow, value)}"]
-    if value in flow.case_anchors:
-        details.append(f"source_line={flow.case_anchors[value]}")
-    if flow.case_labels.get(value):
-        details.append(f"label={flow.case_labels[value]}")
-    return ["    // PseudoForge: %s." % " ".join(details)]
-
-
-def _flow_case_body_state(flow: FlowRewrite, value: int) -> str:
-    if flow.case_body_states:
-        return flow.case_body_states.get(value, "complex_unsliced")
-    return "single_statement_body" if value in flow.case_bodies else "complex_unsliced"
-
-
-def _format_switch_outline_case_label(flow: FlowRewrite, value: int) -> str:
-    if looks_like_ioctl_dispatcher_name(flow.dispatcher):
-        annotation = format_ctl_code(value)
-        if annotation:
-            return "case 0x%X: // %s" % (value, annotation)
-    return f"case {value}:"
-
-
-def _native_switch_dispatchers(text: str, plan: CleanPlan) -> set[str]:
-    return {
-        flow.dispatcher
-        for flow in plan.flow_rewrites
-        if _has_native_switch_for_flow(text, flow)
-    }
-
-
-def _has_native_switch_for_flow(text: str, flow: FlowRewrite) -> bool:
-    if not text or not flow.dispatcher:
-        return False
-    dispatcher = re.escape(flow.dispatcher)
-    return re.search(
-        r"\bswitch\s*\(\s*(?:\(\s*[^()]+\s*\)\s*)*%s\s*\)" % dispatcher,
-        text,
-    ) is not None
+    return _finalize_rendered_c_like_text(_render_switch_outline_impl(capture, plan, rendered_text=rendered_text))
 
 
 def _apply_known_function_signature(text: str, capture: FunctionCapture) -> str:
@@ -712,52 +550,6 @@ def _is_list_insert_tail_assignment(stripped: str) -> bool:
         "newProviderLink->Flink = &ExpFirmwareTableProviderListHead;",
         "InsertTailList(providerListHead, newProviderLink);",
     }
-
-
-def _render_case_body_lines(body: list[str], capture: FunctionCapture, plan: CleanPlan) -> list[str]:
-    rename_map = {item.old: item.new for item in plan.renames if item.apply}
-    rendered = []
-    for line in body:
-        updated = safe_identifier_replace(line, rename_map)
-        updated = _replace_status_literals(updated, capture, plan)
-        rendered.append(updated)
-    if not _is_safe_switch_outline_body(rendered):
-        return [
-            "// PseudoForge: complex body not structurally sliced; review normalized original pseudocode.",
-            "break;",
-        ]
-    return rendered
-
-
-def _is_safe_switch_outline_body(lines: list[str]) -> bool:
-    statements: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("//"):
-            continue
-        statements.append(stripped)
-        if stripped.startswith("goto "):
-            return False
-        if stripped.endswith(":"):
-            return False
-        if stripped.startswith(("if ", "else", "for ", "while ", "do", "switch ")):
-            return False
-        if stripped in {"{", "}"}:
-            return False
-        if not stripped.endswith(";"):
-            return False
-    if len(statements) != 1:
-        return False
-    return statements[0].startswith("return ")
-
-
-def _body_exits(body: list[str]) -> bool:
-    for line in reversed(body):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        return stripped.startswith(("return", "goto", "break", "continue"))
-    return False
 
 
 def _safe_file_stem(name: str) -> str:

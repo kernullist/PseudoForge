@@ -229,6 +229,7 @@ ida_pseudoforge/
     render_callbacks.py
     render_dispatcher.py
     render_driver_entry.py
+    render_flow.py
     render_ioctl.py
     render_labels.py
     render_ntset.py
@@ -298,6 +299,7 @@ tests/
   test_render_callbacks.py
   test_render_dispatcher.py
   test_render_driver_entry.py
+  test_render_flow.py
   test_render_ioctl.py
   test_render_labels.py
   test_render_ntset.py
