@@ -189,6 +189,8 @@ P1 renderer snapshot protection update:
 - `render_cleaned_pseudocode()` now builds a `RenderContext` carrying capture,
   plan, active rename map, display-filtered warnings, and native switch
   dispatcher metadata before header/body rendering.
+- NTSTATUS literal replacement, 32-bit status assignment/store replacement, and
+  status accumulator type upgrades now live in `ida_pseudoforge/core/render_status.py`.
 
 P0 rename identity hardening update:
 

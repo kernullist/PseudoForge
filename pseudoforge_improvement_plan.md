@@ -138,10 +138,14 @@ Completed:
 - [x] Added an explicit snapshot update workflow under `tests/snapshots`.
 - [x] Introduced `RenderContext` for capture, plan, rename map, displayed
   warnings, and native switch dispatcher metadata.
+- [x] Moved NTSTATUS literal and status-type rewrite helpers into a scoped
+  `render_status` module while keeping `ida_pseudoforge.core.render` imports
+  compatible.
 
 Remaining:
 
-- [ ] Move renderer passes into scoped modules one rewrite family at a time.
+- [ ] Move the remaining renderer passes into scoped modules one rewrite family
+  at a time.
 - [ ] Preserve public render imports during extraction.
 - [ ] Keep extraction commits behavior-preserving unless documented otherwise.
 
