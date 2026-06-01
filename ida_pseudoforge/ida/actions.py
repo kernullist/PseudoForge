@@ -803,24 +803,26 @@ def _show_cached_side_by_side_section(
 ) -> bool:
     if not side_by_side_preview_enabled():
         return False
-    if session is None or not session.matches_current(target_path, section.ea):
+    raw_pseudocode = ""
+    summary_text = ""
+    raw_source = "none"
+    if session is not None and session.matches_current(target_path, section.ea) and session.capture.pseudocode:
+        raw_pseudocode = session.capture.pseudocode
+        summary_text = _format_analysis_summary(session.capture, session.plan)
+        raw_source = "session"
+    elif section.raw_pseudocode:
+        raw_pseudocode = section.raw_pseudocode
+        summary_text = "PseudoForge cached analysis 0x%X: raw pseudocode loaded from .forge." % section.ea
+        raw_source = "forge"
+
+    if not raw_pseudocode:
         warning(
-            "PseudoForge side-by-side preview needs the current raw analysis session. "
-            "Opening the cached cleaned section only. Run Analyze current function again "
-            "to refresh raw-vs-cleaned preview."
+            "PseudoForge side-by-side preview needs stored raw Hex-Rays pseudocode. "
+            "Opening the cached cleaned section only. Run Analyze current function once "
+            "with this PseudoForge version to refresh the cached raw-vs-cleaned preview."
         )
         log_event(
-            "%s.side_by_side.unavailable reason=\"stale_or_missing_session\" function=\"%s\" ea=0x%X"
-            % (event_prefix, _ascii_for_log(section.name), section.ea)
-        )
-        return False
-    if not session.capture.pseudocode:
-        warning(
-            "PseudoForge side-by-side preview needs raw Hex-Rays pseudocode. "
-            "Opening the cached cleaned section only."
-        )
-        log_event(
-            "%s.side_by_side.unavailable reason=\"missing_raw_pseudocode\" function=\"%s\" ea=0x%X"
+            "%s.side_by_side.unavailable reason=\"missing_stored_raw_pseudocode\" function=\"%s\" ea=0x%X"
             % (event_prefix, _ascii_for_log(section.name), section.ea)
         )
         return False
@@ -828,8 +830,15 @@ def _show_cached_side_by_side_section(
     target_stem = target_path.stem
     title = "PseudoForge: %s!%s 0x%X" % (target_stem, section.name, section.ea)
     log_event(
-        "%s.side_by_side.show.before title=\"%s\" function=\"%s\" ea=0x%X chars=%d"
-        % (event_prefix, _ascii_for_log(title), _ascii_for_log(section.name), section.ea, len(section.text))
+        "%s.side_by_side.show.before title=\"%s\" function=\"%s\" ea=0x%X chars=%d raw_source=%s"
+        % (
+            event_prefix,
+            _ascii_for_log(title),
+            _ascii_for_log(section.name),
+            section.ea,
+            len(section.text),
+            raw_source,
+        )
     )
     show_text_view(
         title,
@@ -838,10 +847,10 @@ def _show_cached_side_by_side_section(
         suggested_filename=build_save_as_filename(target_stem, section.name, section.ea),
         copy_from_source=False,
         target_stem=target_stem,
-        reference_text=session.capture.pseudocode,
+        reference_text=raw_pseudocode,
         reference_title="Raw Hex-Rays pseudocode",
         content_title="PseudoForge cleaned pseudocode",
-        summary_text=_format_analysis_summary(session.capture, session.plan),
+        summary_text=summary_text,
     )
     log_event(
         "%s.side_by_side.show.after title=\"%s\" function=\"%s\" ea=0x%X"

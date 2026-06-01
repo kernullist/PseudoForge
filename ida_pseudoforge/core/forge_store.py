@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,6 +16,14 @@ _FILE_HEADER = """// PseudoForge aggregate preview file
 // This file is maintained by PseudoForge.
 // Function sections are replaced by EA, so multiple analyzed functions can share one file.
 """
+_RAW_PSEUDOCODE_BEGIN = "// PSEUDOFORGE RAW PSEUDOCODE BEGIN encoding=base64"
+_RAW_PSEUDOCODE_END = "// PSEUDOFORGE RAW PSEUDOCODE END"
+_RAW_BLOCK_RE = re.compile(
+    r"(?ms)^// PSEUDOFORGE RAW PSEUDOCODE BEGIN encoding=base64\s*\n"
+    r"(?P<body>(?:// [A-Za-z0-9+/=]*\s*\n)*)"
+    r"^// PSEUDOFORGE RAW PSEUDOCODE END\s*\n?"
+)
+_RAW_BLOCK_CHUNK_SIZE = 96
 
 
 @dataclass(frozen=True)
@@ -23,6 +32,7 @@ class ForgeFunctionSection:
     name: str
     fingerprint: str
     text: str
+    raw_pseudocode: str = ""
 
 
 def write_forge_function(
@@ -72,12 +82,15 @@ def parse_forge_function_sections(text: str) -> list[ForgeFunctionSection]:
             ea = int(match.group("ea"), 16)
         except ValueError:
             continue
+        section_text = match.group(0).rstrip() + "\n"
+        raw_pseudocode, display_text = _extract_raw_pseudocode(section_text)
         sections.append(
             ForgeFunctionSection(
                 ea=ea,
                 name=match.group("name") or "function",
                 fingerprint=match.group("fingerprint") or "",
-                text=match.group(0).rstrip() + "\n",
+                text=display_text,
+                raw_pseudocode=raw_pseudocode,
             )
         )
     return sections
@@ -105,12 +118,48 @@ def render_forge_function_section(
         "// Rename candidates: %d" % len(plan.active_renames()),
         "// Flow rewrites: %d" % len(plan.flow_rewrites),
         "// Warnings: %d" % display_warning_count(plan),
-        "",
-        cleaned_pseudocode.rstrip(),
-        "",
-        "// PSEUDOFORGE FUNCTION END ea=0x%X" % capture.ea,
     ]
+    raw_block = _render_raw_pseudocode_block(capture.pseudocode)
+    if raw_block:
+        lines.extend(["", raw_block.rstrip()])
+    lines.extend(
+        [
+            "",
+            cleaned_pseudocode.rstrip(),
+            "",
+            "// PSEUDOFORGE FUNCTION END ea=0x%X" % capture.ea,
+        ]
+    )
     return "\n".join(lines) + "\n"
+
+
+def _render_raw_pseudocode_block(raw_pseudocode: str) -> str:
+    if not raw_pseudocode:
+        return ""
+    normalized = raw_pseudocode.replace("\r\n", "\n").replace("\r", "\n").rstrip() + "\n"
+    encoded = base64.b64encode(normalized.encode("utf-8", errors="replace")).decode("ascii")
+    lines = [_RAW_PSEUDOCODE_BEGIN]
+    for index in range(0, len(encoded), _RAW_BLOCK_CHUNK_SIZE):
+        lines.append("// " + encoded[index : index + _RAW_BLOCK_CHUNK_SIZE])
+    lines.append(_RAW_PSEUDOCODE_END)
+    return "\n".join(lines) + "\n"
+
+
+def _extract_raw_pseudocode(section_text: str) -> tuple[str, str]:
+    raw_text = ""
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal raw_text
+        if not raw_text:
+            encoded = "".join(line[3:].strip() for line in match.group("body").splitlines() if line.startswith("// "))
+            try:
+                raw_text = base64.b64decode(encoded.encode("ascii"), validate=True).decode("utf-8", errors="replace")
+            except Exception:
+                raw_text = ""
+        return ""
+
+    display_text = _RAW_BLOCK_RE.sub(replace, section_text).rstrip() + "\n"
+    return raw_text, display_text
 
 
 def _ensure_header(existing_text: str, target_path: str) -> str:

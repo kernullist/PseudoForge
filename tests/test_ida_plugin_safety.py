@@ -615,7 +615,7 @@ class IdaPluginSafetyTests(unittest.TestCase):
         self.assertEqual(calls[0][2]["content_title"], "PseudoForge cleaned pseudocode")
         self.assertIn("PseudoForge analyzed 0x140001000", calls[0][2]["summary_text"])
 
-    def test_current_function_preview_warns_when_side_by_side_has_no_raw_session(self):
+    def test_current_function_preview_uses_persisted_raw_for_side_by_side_without_active_session(self):
         calls = []
         warnings = []
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -650,8 +650,53 @@ class IdaPluginSafetyTests(unittest.TestCase):
                 actions_module.show_text_view = old_show
                 actions_module.warning = old_warning
 
+        self.assertFalse(warnings)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][2]["reference_text"], capture.pseudocode.rstrip() + "\n")
+        self.assertIn("raw pseudocode loaded from .forge", calls[0][2]["summary_text"])
+
+    def test_current_function_preview_warns_when_side_by_side_has_no_stored_raw(self):
+        calls = []
+        warnings = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = Path(temp_dir) / "driver.sys"
+            forge_path = Path(temp_dir) / "driver.forge"
+            forge_path.write_text(
+                """// PseudoForge aggregate preview file
+// This file is maintained by PseudoForge.
+// Function sections are replaced by EA, so multiple analyzed functions can share one file.
+// Target: driver.sys
+
+// PSEUDOFORGE FUNCTION BEGIN ea=0x140001000 name=sub_140001000 fingerprint=legacy
+__int64 __fastcall sub_140001000(int argument)
+{
+    return renamedLocal;
+}
+// PSEUDOFORGE FUNCTION END ea=0x140001000
+""",
+                encoding="utf-8",
+            )
+            old_paths = actions_module._target_and_forge_paths
+            old_current = actions_module._current_function_identity
+            old_side_by_side = actions_module.side_by_side_preview_enabled
+            old_show = actions_module.show_text_view
+            old_warning = actions_module.warning
+            actions_module._target_and_forge_paths = lambda: (target_path, forge_path)
+            actions_module._current_function_identity = lambda: (0x140001000, "sub_140001000")
+            actions_module.side_by_side_preview_enabled = lambda: True
+            actions_module.show_text_view = lambda title, text, **kwargs: calls.append((title, text, kwargs)) or "simple"
+            actions_module.warning = warnings.append
+            try:
+                self.assertTrue(actions_module._show_cached_forge_for_current_function())
+            finally:
+                actions_module._target_and_forge_paths = old_paths
+                actions_module._current_function_identity = old_current
+                actions_module.side_by_side_preview_enabled = old_side_by_side
+                actions_module.show_text_view = old_show
+                actions_module.warning = old_warning
+
         self.assertEqual(len(warnings), 1)
-        self.assertIn("current raw analysis session", warnings[0])
+        self.assertIn("stored raw Hex-Rays pseudocode", warnings[0])
         self.assertEqual(len(calls), 1)
         self.assertNotIn("reference_text", calls[0][2])
 

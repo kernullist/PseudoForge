@@ -560,8 +560,10 @@ P2 IDA side-by-side preview update:
 - The dockable panel uses IDA `PluginForm` plus Qt widgets when available.
 - Cached current-function preview now reuses the active raw Hex-Rays analysis
   session for side-by-side mode when the session still matches the current
-  function. If the raw session is missing or stale, it warns and opens the
-  cleaned cached `.forge` section only.
+  function, and new `.forge` sections persist encoded raw pseudocode so cached
+  side-by-side preview can be reopened without rerunning analysis. Legacy
+  sections without stored raw pseudocode warn and open the cleaned cached
+  section only.
 - The dockable panel now keeps the status, warning/rule summary, and search
   controls in fixed-height rows so the raw and cleaned code panes receive the
   available vertical space.

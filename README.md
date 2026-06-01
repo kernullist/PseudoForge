@@ -443,7 +443,7 @@ Ctrl+Alt+Shift+V  Configure preview mode
 
 `Analyze current function` decompiles the current function, builds the rename plan, flow outline, cleanup classification, deterministic rule report, and warnings, then updates the function section in `<input>.forge`. It does not modify the IDB.
 
-`Show current analysis result` opens only the cached `.forge` section whose function start EA matches the current pseudocode cursor. It does not decompile, invoke an LLM, run analysis, or refresh the `.forge` file. If side-by-side preview is enabled and the current in-memory analysis session still matches the function, it reuses that session's raw Hex-Rays pseudocode for the raw-vs-cleaned dockable panel. If only the cached `.forge` section is available, it warns and opens the cleaned section only. If the current function has not been analyzed yet, it asks the user to run `Analyze current function` first. `Copy all` and `Save as...` operate on that selected section.
+`Show current analysis result` opens only the cached `.forge` section whose function start EA matches the current pseudocode cursor. It does not decompile, invoke an LLM, run analysis, or refresh the `.forge` file. If side-by-side preview is enabled, it uses the current in-memory raw Hex-Rays pseudocode when available, otherwise it reuses the raw pseudocode persisted in the `.forge` section. Legacy `.forge` sections that predate stored raw pseudocode warn and open the cleaned section only until the function is analyzed once with the current PseudoForge version. If the current function has not been analyzed yet, it asks the user to run `Analyze current function` first. `Copy all` and `Save as...` operate on that selected section.
 
 `Analyzed functions...` opens a chooser built from cached `.forge` function-section markers. It avoids opening the full aggregate `.forge` as the primary UI, which keeps navigation usable after many functions have been analyzed.
 
@@ -478,6 +478,9 @@ mode configuration fallback.
   fall back to plain text when Qt highlighter APIs are unavailable.
 - Side-by-side search highlights every matched occurrence in both panes and
   uses a stronger highlight for the active `Prev`/`Next` match.
+- New `.forge` function sections persist raw Hex-Rays pseudocode in an encoded
+  comment block so cached side-by-side preview can be reopened without rerunning
+  analysis.
 - `.forge`, `Copy all`, and `Save as...` output remain plain text without color tags.
 - Set `PSEUDOFORGE_DISABLE_PREVIEW_HIGHLIGHT=1` before launching IDA to isolate syntax-highlight issues.
 - Run `Edit/PseudoForge/Configure preview mode` and select

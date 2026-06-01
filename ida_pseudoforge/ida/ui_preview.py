@@ -1016,6 +1016,14 @@ def show_analyzed_functions_from_text(
 
     resolved_target_stem = target_stem or _source_target_stem(source_path)
     title = "PseudoForge: %s!%s 0x%X" % (resolved_target_stem, selected.name, selected.ea)
+    side_by_side_kwargs = {}
+    if selected.raw_pseudocode:
+        side_by_side_kwargs = {
+            "reference_text": selected.raw_pseudocode,
+            "reference_title": "Raw Hex-Rays pseudocode",
+            "content_title": "PseudoForge cleaned pseudocode",
+            "summary_text": "PseudoForge cached analysis 0x%X: raw pseudocode loaded from .forge." % selected.ea,
+        }
     show_text_view(
         title,
         selected.text,
@@ -1023,6 +1031,7 @@ def show_analyzed_functions_from_text(
         suggested_filename=build_save_as_filename(resolved_target_stem, selected.name, selected.ea),
         copy_from_source=False,
         target_stem=resolved_target_stem,
+        **side_by_side_kwargs,
     )
     _trace_checkpoint(
         "preview.functions.opened",

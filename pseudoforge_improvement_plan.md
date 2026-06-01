@@ -944,6 +944,8 @@ Completed:
   current-function side-by-side preview when the session still matches the
   function, with a visible cleaned-only fallback warning when raw context is
   unavailable.
+- [x] Persisted raw Hex-Rays pseudocode in encoded `.forge` function sections
+  so cached side-by-side preview can be reopened without rerunning analysis.
 - [x] Added visible dockable-preview fallback diagnostics and widened Qt binding
   discovery across PyQt5, PyQt6, PySide6, and PySide2 layouts.
 - [x] Added cooperative cancellation checkpoints for IDA analyze/export/apply
@@ -973,8 +975,9 @@ Completed:
 - The side-by-side highlighter applies a neutral plain-text base before token
   colors, so unhighlighted pseudocode stays readable under IDA dark themes.
 - Cached current-function preview can open side-by-side when the active analysis
-  session still has matching raw pseudocode; otherwise it warns and falls back
-  to the cached cleaned section.
+  session still has matching raw pseudocode or the `.forge` section contains
+  persisted raw pseudocode; legacy sections without stored raw context warn and
+  fall back to the cached cleaned section.
 - Dockable-preview fallback now names the missing backend condition instead of
   silently opening the simple viewer.
 - `Edit/PseudoForge/Cancel current operation` requests cooperative cancellation

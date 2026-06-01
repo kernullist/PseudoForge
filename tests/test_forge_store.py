@@ -263,6 +263,49 @@ NTSTATUS NTAPI NtSetSystemInformation(
                 "PseudoForge__ntoskrnl__FunctionA_0x100.cpp",
             )
 
+    def test_forge_section_persists_raw_pseudocode_for_cached_side_by_side(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = os.path.join(temp_dir, "ntoskrnl.exe")
+            forge_path = os.path.join(temp_dir, "ntoskrnl.forge")
+            capture = capture_from_pseudocode(FORGE_SAMPLE, name="FunctionA", ea=0x100)
+            plan = build_clean_plan(capture)
+
+            forge_text = write_forge_function(
+                forge_path,
+                target_path,
+                capture,
+                plan,
+                render_cleaned_pseudocode(capture, plan),
+            )
+            section = find_forge_function_section(forge_text, 0x100)
+
+            self.assertIsNotNone(section)
+            self.assertIn("PSEUDOFORGE RAW PSEUDOCODE BEGIN", forge_text)
+            self.assertIn("PSEUDOFORGE RAW PSEUDOCODE END", forge_text)
+            self.assertEqual(section.raw_pseudocode, capture.pseudocode.rstrip() + "\n")
+            self.assertNotIn("PSEUDOFORGE RAW PSEUDOCODE BEGIN", section.text)
+            self.assertNotIn("PSEUDOFORGE RAW PSEUDOCODE END", section.text)
+
+    def test_legacy_forge_section_without_raw_pseudocode_still_parses(self) -> None:
+        forge_text = r"""// PseudoForge aggregate preview file
+// This file is maintained by PseudoForge.
+// Function sections are replaced by EA, so multiple analyzed functions can share one file.
+// Target: D:\bin\ntoskrnl.exe
+
+// PSEUDOFORGE FUNCTION BEGIN ea=0x100 name=FunctionA fingerprint=old
+void FunctionA()
+{
+  return;
+}
+// PSEUDOFORGE FUNCTION END ea=0x100
+"""
+
+        section = find_forge_function_section(forge_text, 0x100)
+
+        self.assertIsNotNone(section)
+        self.assertEqual(section.raw_pseudocode, "")
+        self.assertIn("void FunctionA()", section.text)
+
 
 if __name__ == "__main__":
     unittest.main()
