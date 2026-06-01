@@ -36,6 +36,10 @@ _PROFILE_POINTER_SIZE = 8
 _OB_PRE_OPERATION_INFORMATION = "OB_PRE_OPERATION_INFORMATION"
 _OB_PRE_CREATE_HANDLE_INFORMATION = "OB_PRE_CREATE_HANDLE_INFORMATION"
 _OB_PRE_DUPLICATE_HANDLE_INFORMATION = "OB_PRE_DUPLICATE_HANDLE_INFORMATION"
+_POINTER_SIZED_CAST_PATTERN = (
+    r"(?:HANDLE|PVOID|ULONG_PTR|UINT_PTR|DWORD_PTR|LONG_PTR|INT_PTR|SIZE_T|SSIZE_T|"
+    r"ULONGLONG|LONG64|ULONG64|(?:__int64|_QWORD|void)\s*\*)"
+)
 
 
 INFERRED_PROVIDER_TYPE = "\n".join(
@@ -1093,7 +1097,7 @@ def _rewrite_ob_pre_operation_inferred_records(text: str) -> str:
 
 def _infer_ob_process_rule_record_vars(text: str) -> set[str]:
     result: set[str] = set()
-    for match in re.finditer(r"\b(?P<var>[A-Za-z_][A-Za-z0-9_]*)\[2\]\s*==\s*[A-Za-z_][A-Za-z0-9_]*", text):
+    for match in re.finditer(r"\b(?P<var>[A-Za-z_][A-Za-z0-9_]*)\[2\]\s*(?:==|!=)\s*[A-Za-z_][A-Za-z0-9_]*", text):
         variable = match.group("var")
         if re.search(r"\+\+\*\(\(_DWORD\s+\*\)%s\s*\+\s*6\s*\)" % re.escape(variable), text) and re.search(
             r"KeQuerySystemTimePrecise\(\s*%s\s*\+\s*4\s*\)" % re.escape(variable),
@@ -1154,7 +1158,7 @@ def _rewrite_ob_process_rule_record_var(text: str, variable: str) -> str:
         result,
     )
     replacements = [
-        (r"\(HANDLE\)%s\[2\]" % escaped, "%s->ProcessId" % variable),
+        (r"\(%s\)\s*%s\[2\]" % (_POINTER_SIZED_CAST_PATTERN, escaped), "%s->ProcessId" % variable),
         (r"\+\+\*\(\(_DWORD\s+\*\)%s\s*\+\s*6\s*\)" % escaped, "++%s->HitCount" % variable),
         (r"\*\(\(_DWORD\s+\*\)%s\s*\+\s*6\s*\)" % escaped, "%s->HitCount" % variable),
         (r"\*\(\(_QWORD\s+\*\)%s\s*\+\s*2\s*\)" % escaped, "%s->ProcessId" % variable),

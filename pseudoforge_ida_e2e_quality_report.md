@@ -474,11 +474,94 @@ memset(copyBuffer, 0LL, 64LL);
 Remaining quality blockers are now dominated by structure/layout recovery and
 compiler-local dataflow recovery rather than simple helper-call opacity.
 
+## Inferred Record Field-Access Follow-up
+
+The helper-alias run still left some OB callback list-walk records with raw
+field expressions after the record type was already inferred. The remaining
+forms were not tied to one function or address; they were alternate Hex-Rays
+spellings for the same record fields.
+
+Implemented generic rule:
+
+- For locals already proven to be `INFERRED_OB_PROCESS_RULE_RECORD`, rewrite
+  pointer-sized cast/index field reads such as casted `entry[2]` into
+  `entry->ProcessId`.
+- Extend the record inference gate from equality-only comparisons to equality
+  and inequality comparisons so while-list scans get the same field cleanup as
+  for-loop scans.
+- Keep the rule gated by independent record evidence: process-id field compare,
+  hit-count update, and last-seen-time update. No function address, binary name,
+  pool tag, or sample-specific symbol text is used.
+- Review mode tightened the cast pattern so `void *` is accepted but plain
+  `void` is not.
+
+Comparable output directory:
+
+```text
+pseudoforge_out\ida_e2e_quality\record_compare_skiplib_20260601_225228
+```
+
+Comparable result:
+
+```text
+Processed: 46
+Succeeded: 46
+Skipped: 0
+Failed: 0
+Warnings: 0
+LLM status: disabled=46
+Compare artifacts: 46
+```
+
+All-discovered-function output directory:
+
+```text
+pseudoforge_out\ida_e2e_quality\record_compare_20260601_224936
+```
+
+All-discovered-function result:
+
+```text
+Processed: 51
+Succeeded: 51
+Skipped: 0
+Failed: 0
+Warnings: 0
+LLM status: disabled=51
+Compare artifacts: 51
+```
+
+Quality movement from the helper-alias run:
+
+| Metric | Helper alias | Inferred record |
+| --- | ---: | ---: |
+| Average score | 67.37 | 67.37 |
+| Average opportunity | 39.33 | 39.33 |
+| Average reward | 7.52 | 7.52 |
+| `profile_field_access` count | 45 | 50 |
+| `typed_index_offset` count | 58 | 57 |
+| `unresolved_width_type` count | 412 | 406 |
+
+Representative cleaned output:
+
+```cpp
+INFERRED_OB_PROCESS_RULE_RECORD *v11; // rcx
+...
+while ( v11->ProcessId != processId )
+{
+  v11 = (INFERRED_OB_PROCESS_RULE_RECORD *)v11->Link.Flink;
+  ...
+}
+++v11->HitCount;
+KeQuerySystemTimePrecise(&v11->LastSeenTime);
+```
+
 ## Final Judgment
 
 For the current no-PDB kernel pattern driver, PseudoForge now reaches practical
-review quality across all 46 decompiled functions: every function processed
-successfully, no known incorrect rewrite remained from the reviewed output, the
+review quality across the comparable 46-function `-SkipLibThunk` set and also
+processes all 51 IDA-discovered functions successfully when library thunks are
+included. No known incorrect rewrite remained from the reviewed output, the
 concrete no-PDB callback mismatch found in the baseline was fixed with generic
 regression-tested rules, and the follow-up quality-lift cycles reduced generic
 argument artifacts from 252 to 60 without adding sample-specific hardcoding.

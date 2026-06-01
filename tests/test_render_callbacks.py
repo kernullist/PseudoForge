@@ -379,6 +379,7 @@ __int64 __fastcall sub_140002350(__int64 a1, POB_PRE_OPERATION_CALLBACK a2)
   int desiredAccess;
   PVOID eventRecord;
   __int64 *callerListEntry;
+  __int64 *blockedListEntry;
   char *newCallerEntry;
   unsigned int operationStatus;
   HANDLE callerProcessId;
@@ -404,11 +405,25 @@ __int64 __fastcall sub_140002350(__int64 a1, POB_PRE_OPERATION_CALLBACK a2)
   {
     for ( callerListEntry = *(__int64 **)(a1 + 152); callerListEntry != (__int64 *)(a1 + 152); callerListEntry = (__int64 *)*callerListEntry )
     {
-      if ( (HANDLE)callerListEntry[2] == callerProcessId )
+      if ( (__int64 *)callerListEntry[2] == callerProcessId )
       {
         ++*((_DWORD *)callerListEntry + 6);
         KeQuerySystemTimePrecise(callerListEntry + 4);
       }
+    }
+    blockedListEntry = *(__int64 **)(a1 + 168);
+    if ( blockedListEntry != (__int64 *)(a1 + 168) )
+    {
+      while ( (HANDLE)blockedListEntry[2] != targetProcessId )
+      {
+        blockedListEntry = (__int64 *)*blockedListEntry;
+        if ( blockedListEntry == (__int64 *)(a1 + 168) )
+        {
+          break;
+        }
+      }
+      ++*((_DWORD *)blockedListEntry + 6);
+      KeQuerySystemTimePrecise(blockedListEntry + 4);
     }
     newCallerEntry = (char *)ExAllocateFromNPagedLookasideList((PNPAGED_LOOKASIDE_LIST)(a1 + 320));
     if ( newCallerEntry )
@@ -470,6 +485,10 @@ __int64 __fastcall sub_140002350(__int64 a1, POB_PRE_OPERATION_CALLBACK a2)
         self.assertIn("callerListEntry->ProcessId == callerProcessId", rendered)
         self.assertIn("++callerListEntry->HitCount;", rendered)
         self.assertIn("KeQuerySystemTimePrecise(&callerListEntry->LastSeenTime);", rendered)
+        self.assertIn("INFERRED_OB_PROCESS_RULE_RECORD *blockedListEntry;", rendered)
+        self.assertIn("blockedListEntry->ProcessId != targetProcessId", rendered)
+        self.assertIn("++blockedListEntry->HitCount;", rendered)
+        self.assertIn("KeQuerySystemTimePrecise(&blockedListEntry->LastSeenTime);", rendered)
         self.assertIn("INFERRED_OB_PROCESS_RULE_RECORD *newCallerEntry;", rendered)
         self.assertIn("newCallerEntry->ProcessId = callerProcessId;", rendered)
         self.assertIn("newCallerEntry->AutoAdded = 1;", rendered)
@@ -481,8 +500,10 @@ __int64 __fastcall sub_140002350(__int64 a1, POB_PRE_OPERATION_CALLBACK a2)
         self.assertNotIn("POB_PRE_OPERATION_CALLBACK preInfo", rendered)
         self.assertNotIn("LOBYTE(desiredAccess)", rendered)
         self.assertNotIn("callerListEntry[2]", rendered)
+        self.assertNotIn("blockedListEntry[2]", rendered)
         self.assertNotIn("callerListEntry = (INFERRED_OB_PROCESS_RULE_RECORD *)callerListEntry->Link.Flink", rendered)
         self.assertNotIn("*((_DWORD *)callerListEntry + 6)", rendered)
+        self.assertNotIn("*((_DWORD *)blockedListEntry + 6)", rendered)
         self.assertNotIn("*((_DWORD *)eventRecord + 9)", rendered)
         self.assertNotIn("*((_QWORD *)preOperationInfo + 4)", rendered)
 

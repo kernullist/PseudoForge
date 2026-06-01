@@ -1081,6 +1081,13 @@ Completed:
 - [x] Reran the full no-PDB 46-function IDA batch after the follow-up lift:
   46 processed, 46 succeeded, 0 skipped, 0 failed, LLM disabled for all
   functions.
+- [x] Added generic inferred-record field cleanup for pointer-sized casted
+  array-index accesses on already inferred OB process-rule records, including
+  equality and inequality list-walk comparisons.
+- [x] Reran both validation modes after the inferred-record cleanup:
+  46 processed with `-SkipLibThunk`, and 51 processed with all IDA-discovered
+  no-PDB functions; both runs succeeded with 0 skipped, 0 failed, and LLM
+  disabled for all functions.
 
 ### Current Evidence
 
@@ -1089,19 +1096,28 @@ Completed:
 - `pseudoforge_ida_e2e_quality_report.md` records the 2026-06-01 no-PDB kernel
   pattern driver quality loop, including baseline, cycle, and review-correction
   artifacts.
-- The latest no-PDB quality-lift run is
-  `pseudoforge_out\ida_e2e_quality\helperalias_memset_20260601_223437`: 46
+- The latest comparable no-PDB quality-lift run is
+  `pseudoforge_out\ida_e2e_quality\record_compare_skiplib_20260601_225228`: 46
   processed, 46 succeeded, 0 skipped, 0 failed, LLM disabled for all
   functions.
-- Completed in the latest cycle: generic runtime memory-helper alias inference.
+- The all-discovered-function no-PDB run is
+  `pseudoforge_out\ida_e2e_quality\record_compare_20260601_224936`: 51
+  processed, 51 succeeded, 0 skipped, 0 failed, LLM disabled for all
+  functions.
+- Completed in the latest cycles: generic runtime memory-helper alias inference
+  and generic inferred-record field cleanup for casted index expressions.
   It classifies strongly evidenced `sub_*` memory-fill/memory-move helpers by
   signature and body behavior, renders caller sites as standard `memset` or
-  `memmove` calls, and opportunistically probes only direct callees in
-  interactive IDA use so users do not need to analyze every function first.
+  `memmove` calls, opportunistically probes only direct callees in interactive
+  IDA use so users do not need to analyze every function first, and rewrites
+  pointer-sized cast/index forms only after record-layout evidence has already
+  identified the local as an inferred OB process-rule record.
 - The quality scorer improved the 46-function average from 61.98 in cycle4 to
   67.37 in the latest run. Compared with the postcommit baseline, compiler
   local artifacts dropped from 872 to 818, raw pointer-offset findings dropped
-  from 73 to 70, and unresolved helper-call findings dropped from 90 to 74.
+  from 73 to 70, unresolved helper-call findings dropped from 90 to 74,
+  profile-backed field-access rewards rose from 45 to 50, and one remaining
+  typed-index finding was removed without sample-specific matching.
 
 ### Problem
 

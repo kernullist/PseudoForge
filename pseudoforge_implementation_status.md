@@ -1361,6 +1361,50 @@ quality:
 - artifact_reduction: 554 -> 586
 ```
 
+Inferred record field-access quality lift:
+
+```text
+implemented:
+- Added generic pointer-sized cast/index cleanup for already inferred OB
+  process-rule records. This converts forms such as casted `entry[2]` field
+  reads into `entry->ProcessId` only after independent record evidence has
+  identified the local as an `INFERRED_OB_PROCESS_RULE_RECORD`.
+- Extended the same evidence gate from equality-only list checks to equality and
+  inequality comparisons, covering while-list scans as well as for-loop scans.
+- Added regression coverage for both casted index reads and inequality-based
+  record walks.
+
+review:
+- Confirmed the rule is not tied to function address, binary name, pool tag, or
+  sample-specific symbol text.
+- Tightened the cast type pattern so `void *` is accepted but plain `void` is
+  not.
+
+validated:
+- python -B -m unittest discover -s tests -v: 385 OK
+- python -m pytest -q: 385 passed, 5 subtests passed
+- python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+- git diff --check -- .: passed
+- hardcoding scan over touched inferred-record files: no sample-specific hits
+- IDA Professional 9.0 no-PDB batch with -SkipLibThunk: 46 processed, 46
+  succeeded, 0 skipped, 0 failed, LLM disabled=46
+- IDA Professional 9.0 no-PDB all-discovered-function batch: 51 processed, 51
+  succeeded, 0 skipped, 0 failed, LLM disabled=51
+
+artifacts:
+- pseudoforge_out\ida_e2e_quality\record_compare_skiplib_20260601_225228
+- pseudoforge_out\ida_e2e_quality\record_compare_skiplib_20260601_225228\quality_summary.md
+- pseudoforge_out\ida_e2e_quality\record_compare_20260601_224936
+- pseudoforge_out\ida_e2e_quality\record_compare_20260601_224936\quality_summary.md
+
+quality:
+- 46-function average score remains 67.37 after this narrow field-access lift.
+- profile_field_access rewards: 45 -> 50
+- typed_index_offset count: 58 -> 57
+- unresolved_width_type count: 412 -> 406
+- raw_pointer_offset count remains 70
+```
+
 Next continuation point:
 
 ```text
