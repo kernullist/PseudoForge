@@ -1296,6 +1296,71 @@ deferred:
 - Interactive export now shares raw pseudocode, warnings JSON, raw-vs-cleaned diff, and summary JSON artifacts with the CLI paths; only IDA Free CLI-specific run manifest output remains separate.
 ```
 
+Follow-up no-PDB quality lift:
+
+```text
+implemented:
+- Added generic WDK API metadata-backed local rename recovery for address-taken out parameters, API return locals, and API argument role locals.
+- Added exact constant pointer-expression alias reuse for already established stable pointer aliases.
+- Review mode fixed API profile pointer typedef handling so runtime-memory heuristics keep their narrower pointer checks.
+- Review mode fixed generic API argument rename collisions against existing case-variant locals.
+
+validated:
+- python -B -m unittest discover -s tests -v: 376 OK
+- python -m pytest -q: 376 passed, 5 subtests passed
+- python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+- git diff --check -- .: passed
+- IDA Professional 9.0 no-PDB batch: 46 processed, 46 succeeded, 0 skipped, 0 failed, LLM disabled=46
+
+artifacts:
+- pseudoforge_out\ida_e2e_quality\qualitylift_20260601_220431
+- pseudoforge_out\ida_e2e_quality\qualitylift_20260601_220431\quality_score.md
+
+quality:
+- average score: 65.83 -> 66.63
+- compiler_local_name: 872 -> 818
+- raw_pointer_offset: 73 -> 70
+- artifact_reduction: 518 -> 554
+```
+
+Runtime helper alias quality lift:
+
+```text
+implemented:
+- Added generic runtime helper alias inference for no-PDB `sub_*` memory-fill
+  and memory-move helpers based on recovered signature roles and helper body
+  evidence.
+- Added batch postprocessing so inferred helper aliases render caller sites as
+  standard `memset` or `memmove` calls in cleaned compare artifacts,
+  per-function forge sections, aggregate forge output, and refreshed diffs.
+- Helper function definitions keep their original `sub_*` names; only call
+  sites are rewritten.
+- Added interactive direct-callee probing so normal IDA use does not require
+  analyzing all functions before helper aliases can appear in the current
+  preview.
+- Review mode fixed result-alias comparison handling so `result == ...` is not
+  treated as a mutation.
+
+validated:
+- python -B -m unittest discover -s tests -v: 385 OK
+- python -m pytest -q: 385 passed, 5 subtests passed
+- python -B -m compileall .\pseudoforge.py .\ida_pseudoforge .\tests .\tools: passed
+- git diff --check -- .: passed
+- hardcoding scan over touched runtime-helper files: no sample-specific hits
+- IDA Professional 9.0 no-PDB batch: 46 processed, 46 succeeded, 0 skipped, 0 failed, LLM disabled=46
+
+artifacts:
+- pseudoforge_out\ida_e2e_quality\helperalias_memset_20260601_223437
+- pseudoforge_out\ida_e2e_quality\helperalias_memset_20260601_223437\quality_score.md
+
+quality:
+- average score: 66.63 -> 67.37
+- average opportunity: 40.02 -> 39.33
+- average reward: 7.39 -> 7.52
+- unresolved_helper_call: 90 -> 74
+- artifact_reduction: 554 -> 586
+```
+
 Next continuation point:
 
 ```text

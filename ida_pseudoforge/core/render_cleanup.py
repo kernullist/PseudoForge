@@ -19,6 +19,7 @@ def apply_generic_render_cleanups(text: str, scratch_sinks: set[str] | None = No
     result = rewrite_scalar_out_array_storage(text)
     result = fold_unrolled_wide_array_copies(result)
     result = fold_single_assignment_pointer_aliases(result)
+    result = reuse_constant_pointer_expression_aliases(result)
     return suppress_scratch_sink_assignments(result, scratch_sinks or set())
 
 
@@ -37,6 +38,20 @@ def fold_single_assignment_pointer_aliases(text: str) -> str:
         for alias, target in _single_assignment_pointer_aliases(result):
             updated = _remove_declaration_and_assignment(result, alias, target)
             updated = re.sub(r"(?<![.>])\b%s\b" % re.escape(alias), target, updated)
+            if updated != result:
+                result = updated
+                changed = True
+                break
+    return result
+
+
+def reuse_constant_pointer_expression_aliases(text: str) -> str:
+    result = text or ""
+    changed = True
+    while changed:
+        changed = False
+        for alias in _constant_pointer_expression_aliases(result):
+            updated = _replace_constant_pointer_expression_alias(result, alias)
             if updated != result:
                 result = updated
                 changed = True
@@ -254,6 +269,81 @@ def _single_assignment_pointer_aliases(text: str) -> list[tuple[str, str]]:
             continue
         aliases.append((alias, target))
     return aliases
+
+
+def _constant_pointer_expression_aliases(text: str) -> list[dict[str, object]]:
+    declared = _pointer_local_declarations(text)
+    aliases: list[dict[str, object]] = []
+    assignment_pattern = re.compile(
+        r"(?m)^\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+        r"(?:(?P<cast>\([^;\n()]*\*[^;\n()]*\))\s*)?"
+        r"\(\s*(?P<base>[A-Za-z_][A-Za-z0-9_]*)\s*\+\s*"
+        r"(?P<offset>0x[0-9A-Fa-f]+|\d+)(?P<suffix>LL|i64|i32|uLL|ULL|u)?\s*\)\s*;\s*$"
+    )
+    for match in assignment_pattern.finditer(text or ""):
+        alias = match.group("alias")
+        if alias not in declared:
+            continue
+        if len(re.findall(r"(?m)^\s*%s\s*=" % re.escape(alias), text or "")) != 1:
+            continue
+        declaration_match = _local_declaration_match(text, alias)
+        prefix = text[: match.start()]
+        if declaration_match is not None:
+            prefix = prefix[: declaration_match.start()] + prefix[declaration_match.end() :]
+        if re.search(r"\b%s\b" % re.escape(alias), prefix):
+            continue
+        tail = text[match.end() :]
+        if _has_direct_alias_mutation(tail, alias):
+            continue
+        if _has_direct_alias_mutation(tail, match.group("base")):
+            continue
+        aliases.append(
+            {
+                "alias": alias,
+                "base": match.group("base"),
+                "offset": _numeric_offset_value(match.group("offset")),
+                "assignment_end": match.end(),
+            }
+        )
+    return aliases
+
+
+def _replace_constant_pointer_expression_alias(text: str, alias: dict[str, object]) -> str:
+    base = str(alias["base"])
+    offset = int(alias["offset"])
+    name = str(alias["alias"])
+    start = int(alias["assignment_end"])
+    prefix = text[:start]
+    tail = text[start:]
+    replaced_tail = _replace_casted_constant_pointer_expression(tail, base, offset, name)
+    replaced_tail = _replace_bare_constant_pointer_expression(replaced_tail, base, offset, name)
+    return prefix + replaced_tail
+
+
+def _replace_casted_constant_pointer_expression(text: str, base: str, offset: int, alias: str) -> str:
+    expression = _constant_offset_expression_pattern(base, offset)
+    pattern = re.compile(
+        r"(?P<cast>\((?:[^;\n()]*\*[^;\n()]*|P[A-Z0-9_]+)\))\s*\(\s*%s\s*\)" % expression
+    )
+    return pattern.sub(lambda match: "%s%s" % (match.group("cast"), alias), text or "")
+
+
+def _replace_bare_constant_pointer_expression(text: str, base: str, offset: int, alias: str) -> str:
+    expression = _constant_offset_expression_pattern(base, offset)
+    pattern = re.compile(r"(?<![A-Za-z0-9_])%s(?!\s*[\+\-\[\w])" % expression)
+    return pattern.sub(alias, text or "")
+
+
+def _constant_offset_expression_pattern(base: str, offset: int) -> str:
+    literal_patterns = [re.escape(str(offset)), re.escape(hex(offset))]
+    if offset >= 10:
+        literal_patterns.append(re.escape(hex(offset).upper().replace("X", "x")))
+    literal = "(?:%s)(?:LL|i64|i32|uLL|ULL|u)?" % "|".join(dict.fromkeys(literal_patterns))
+    return r"%s\s*\+\s*%s" % (re.escape(base), literal)
+
+
+def _numeric_offset_value(literal: str) -> int:
+    return int((literal or "0").lower(), 16 if (literal or "").lower().startswith("0x") else 10)
 
 
 def _is_write_only_assignment_sink(text: str, name: str, min_assignments: int = 2) -> bool:
@@ -564,7 +654,7 @@ def _remove_unused_local_declaration(text: str, name: str) -> str:
 def _local_declaration_match(text: str, name: str) -> re.Match[str] | None:
     return re.search(
         r"(?m)^[ \t]*(?:const\s+)?(?:struct\s+)?[A-Za-z_][A-Za-z0-9_:\s\*\&<>]*?\s+"
-        r"[\*\&]?\s*%s\s*(?:\[[^\]]+\])?\s*;[^\n]*\n?" % re.escape(name),
+        r"[\*\&]*\s*%s\s*(?:\[[^\]]+\])?\s*;[^\n]*\n?" % re.escape(name),
         text or "",
     )
 
@@ -582,7 +672,7 @@ def _line_spans(text: str) -> list[tuple[int, int, str]]:
 def _pointer_local_declarations(text: str) -> set[str]:
     result: set[str] = set()
     pattern = re.compile(
-        r"(?m)^\s*(?P<type>(?:struct\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s+\*)|P[A-Z0-9_]+)\s*"
+        r"(?m)^\s*(?P<type>(?:struct\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s*\*)+|P[A-Z0-9_]+)\s*"
         r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*;[^\n]*$"
     )
     for match in pattern.finditer(text or ""):
@@ -592,7 +682,7 @@ def _pointer_local_declarations(text: str) -> set[str]:
 
 def _remove_declaration_and_assignment(text: str, alias: str, target: str) -> str:
     result = re.sub(
-        r"(?m)^\s*(?:(?:struct\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s+\*)|P[A-Z0-9_]+)\s*"
+        r"(?m)^\s*(?:(?:struct\s+)?[A-Za-z_][A-Za-z0-9_]*(?:\s*\*)+|P[A-Z0-9_]+)\s*"
         r"%s\s*;[^\n]*\n" % re.escape(alias),
         "",
         text,

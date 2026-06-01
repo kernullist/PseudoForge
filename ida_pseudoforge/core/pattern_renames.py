@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 
-from ida_pseudoforge.core.normalize import extract_parameters_from_signature
+from ida_pseudoforge.core.kernel_api import kernel_function_metadata
+from ida_pseudoforge.core.normalize import extract_parameters_from_signature, find_matching_paren, split_parameters_with_spans
 from ida_pseudoforge.core.plan_schema import FunctionCapture, RenameSuggestion
 
 
@@ -71,6 +72,9 @@ def pattern_renames(capture: FunctionCapture) -> list[RenameSuggestion]:
     suggestions.extend(_runtime_memory_parameter_renames(capture))
     suggestions.extend(_output_buffer_contract_parameter_renames(capture))
     suggestions.extend(_structure_base_parameter_renames(capture))
+    suggestions.extend(_api_out_parameter_local_renames(capture))
+    suggestions.extend(_api_result_local_renames(capture))
+    suggestions.extend(_api_argument_local_renames(capture))
     suggestions.extend(_list_entry_head_parameter_renames(capture))
     suggestions.extend(_list_entry_head_local_renames(capture))
     suggestions.extend(_lookaside_entry_allocation_renames(capture))
@@ -296,6 +300,118 @@ def _pool_allocation_renames(text: str) -> list[RenameSuggestion]:
                 )
             )
     return suggestions
+
+
+def _api_out_parameter_local_renames(capture: FunctionCapture) -> list[RenameSuggestion]:
+    local_names = {var.name for var in capture.lvars if var.name}
+    byref_names = _byref_local_names(capture.pseudocode)
+    suggestions = []
+    for call in _iter_profiled_calls(capture.pseudocode):
+        params = call["params"]
+        arguments = call["arguments"]
+        for index, argument in enumerate(arguments):
+            if index >= len(params):
+                continue
+            local_name = _addressed_local_name(argument)
+            if not local_name or local_name not in local_names:
+                continue
+            if not _looks_like_generic_temporary(local_name):
+                continue
+            if byref_names and local_name not in byref_names:
+                continue
+            param = params[index]
+            param_name = str(param.get("name", ""))
+            param_type = str(param.get("type", ""))
+            if not _is_pointer_like_profile_type(param_type):
+                continue
+            new_name = _semantic_name_from_api_parameter(param_name, param_type)
+            if not new_name or new_name == local_name:
+                continue
+            if _would_shadow_case_variant(local_names, local_name, new_name):
+                continue
+            suggestions.append(
+                RenameSuggestion(
+                    kind="lvar",
+                    old=local_name,
+                    new=new_name,
+                    confidence=0.86,
+                    source="api-out-param",
+                    evidence="%s argument %d is an address-taken local for profile parameter %s"
+                    % (call["name"], index, param_name),
+                )
+            )
+    return _unique_target_suggestions(suggestions)
+
+
+def _api_result_local_renames(capture: FunctionCapture) -> list[RenameSuggestion]:
+    type_by_name = {var.name: var.type for var in capture.lvars if var.name}
+    local_names = set(type_by_name)
+    suggestions = []
+    assignment_pattern = re.compile(
+        r"\b(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?"
+        r"(?P<callee>[A-Za-z_][A-Za-z0-9_]*)\s*\("
+    )
+    for match in assignment_pattern.finditer(capture.pseudocode):
+        old_name = match.group("dst")
+        if not _looks_like_generic_temporary(old_name) and not _looks_like_pascal_local(old_name):
+            continue
+        callee = match.group("callee")
+        metadata = kernel_function_metadata(callee)
+        return_type = str(metadata.get("return_type", ""))
+        if not return_type or return_type.upper() == "VOID":
+            continue
+        new_name = _semantic_name_from_api_result(callee, return_type, type_by_name.get(old_name, ""))
+        if not new_name or new_name == old_name:
+            continue
+        if _would_shadow_case_variant(local_names, old_name, new_name):
+            continue
+        suggestions.append(
+            RenameSuggestion(
+                kind="lvar",
+                old=old_name,
+                new=new_name,
+                confidence=0.84,
+                source="api-result",
+                evidence="local receives %s return value of %s" % (return_type, callee),
+            )
+        )
+    return _unique_target_suggestions(suggestions)
+
+
+def _api_argument_local_renames(capture: FunctionCapture) -> list[RenameSuggestion]:
+    local_names = {var.name for var in capture.lvars if var.name}
+    suggestions = []
+    for call in _iter_profiled_calls(capture.pseudocode):
+        params = call["params"]
+        arguments = call["arguments"]
+        for index, argument in enumerate(arguments):
+            if index >= len(params):
+                continue
+            local_name = _plain_local_argument_name(argument)
+            if not local_name or local_name not in local_names:
+                continue
+            if not _looks_like_generic_temporary(local_name):
+                continue
+            param = params[index]
+            param_name = str(param.get("name", ""))
+            param_type = str(param.get("type", ""))
+            new_name = _semantic_name_from_api_parameter(param_name, param_type)
+            if not new_name or new_name == local_name:
+                continue
+            if _would_shadow_case_variant(local_names, local_name, new_name):
+                continue
+            suggestions.append(
+                RenameSuggestion(
+                    kind="lvar",
+                    old=local_name,
+                    new=new_name,
+                    confidence=0.80,
+                    source="api-argument",
+                    evidence="local is passed to %s profile parameter %s"
+                    % (call["name"], param_name),
+                )
+            )
+    return _unique_target_suggestions(suggestions)
 
 
 def _saved_previous_mode_renames(capture: FunctionCapture) -> list[RenameSuggestion]:
@@ -715,6 +831,134 @@ def _looks_like_list_entry_head_local(text: str, name: str) -> bool:
 
 def _looks_like_generic_temporary(name: str) -> bool:
     return bool(re.fullmatch(r"v\d+", name or ""))
+
+
+def _looks_like_pascal_local(name: str) -> bool:
+    return bool(re.fullmatch(r"[A-Z][A-Za-z0-9_]*", name or "")) and not (name or "").isupper()
+
+
+def _iter_profiled_calls(text: str) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+    for match in re.finditer(r"\b(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(", text or ""):
+        name = match.group("name")
+        metadata = kernel_function_metadata(name)
+        params = metadata.get("params")
+        if not isinstance(params, list) or not params:
+            continue
+        open_index = (text or "").find("(", match.start())
+        close_index = find_matching_paren(text or "", open_index)
+        if close_index < 0:
+            continue
+        parameter_text = (text or "")[open_index + 1 : close_index]
+        arguments = [argument.strip() for argument, _span in split_parameters_with_spans(parameter_text)]
+        calls.append({"name": name, "params": params, "arguments": arguments})
+    return calls
+
+
+def _byref_local_names(text: str) -> set[str]:
+    return {
+        match.group("name")
+        for match in re.finditer(
+            r"(?m)^\s*(?:struct\s+)?[A-Za-z_][A-Za-z0-9_:\s\*\&<>]*?\s+"
+            r"[\*\&]?\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]+\])?\s*;[^\n]*\bBYREF\b",
+            text or "",
+        )
+    }
+
+
+def _addressed_local_name(argument: str) -> str:
+    stripped = (argument or "").strip()
+    match = re.fullmatch(r"&\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)", stripped)
+    if match:
+        return match.group("name")
+    match = re.fullmatch(
+        r"\(\s*(?:struct\s+)?[A-Za-z_][A-Za-z0-9_:\s]*\*+\s*\)\s*&\s*"
+        r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)",
+        stripped,
+    )
+    if match:
+        return match.group("name")
+    return ""
+
+
+def _plain_local_argument_name(argument: str) -> str:
+    stripped = (argument or "").strip()
+    match = re.fullmatch(r"(?:\([^)]+\)\s*)?(?P<name>[A-Za-z_][A-Za-z0-9_]*)", stripped)
+    return match.group("name") if match else ""
+
+
+def _semantic_name_from_api_result(function_name: str, return_type: str, local_type: str) -> str:
+    if "KIRQL" in (return_type or "") and "Acquire" in function_name and "SpinLock" in function_name:
+        return "oldIrql"
+    current_match = re.search(r"Get(Current[A-Za-z0-9_]+)$", function_name or "")
+    if current_match:
+        return _lower_camel_from_pascal(current_match.group(1))
+    getter_match = re.search(r"Get([A-Za-z0-9_]+)$", function_name or "")
+    if getter_match:
+        return _lower_camel_from_pascal(getter_match.group(1))
+    allocate_match = re.search(r"Allocate([A-Za-z0-9_]+)$", function_name or "")
+    if allocate_match and _is_pointer_like_profile_type(return_type):
+        allocated_name = _lower_camel_from_pascal(allocate_match.group(1))
+        if allocated_name in {"mdl", "workItem"}:
+            return allocated_name
+    if "KIRQL" in (local_type or ""):
+        return "oldIrql"
+    return ""
+
+
+def _semantic_name_from_api_parameter(param_name: str, param_type: str) -> str:
+    if not param_name:
+        return ""
+    name = _lower_camel_from_pascal(param_name)
+    if not name:
+        return ""
+    if name == "lookaside" and "LOOKASIDE_LIST" in (param_type or ""):
+        return "lookasideList"
+    if name in {"spinLock", "currentTime", "deviceObject", "returnLength", "numberOfBytesTransferred"}:
+        return name
+    if name in {"entry", "irp", "mdl", "workItem"}:
+        return name
+    if name.lower().endswith("irql"):
+        return "oldIrql" if "restores" in (param_type or "").lower() else name
+    return ""
+
+
+def _is_pointer_like_profile_type(type_text: str) -> bool:
+    text = (type_text or "").strip()
+    if _is_pointer_type(text):
+        return True
+    if not re.fullmatch(r"P[A-Z0-9_]+", text):
+        return False
+    non_pointer_prefixes = (
+        "POOL_",
+        "POWER_",
+        "PROCESS",
+        "PAGE",
+        "PCI_",
+        "PEP_",
+        "PNP_",
+        "POLICY_",
+        "PORT_",
+    )
+    return not any(text.startswith(prefix) for prefix in non_pointer_prefixes)
+
+
+def _unique_target_suggestions(suggestions: list[RenameSuggestion]) -> list[RenameSuggestion]:
+    by_target: dict[str, list[RenameSuggestion]] = {}
+    for suggestion in suggestions:
+        by_target.setdefault(suggestion.new, []).append(suggestion)
+    result = []
+    for target_suggestions in by_target.values():
+        old_names = {item.old for item in target_suggestions}
+        if len(old_names) == 1:
+            result.append(target_suggestions[0])
+    return result
+
+
+def _would_shadow_case_variant(local_names: set[str], old_name: str, new_name: str) -> bool:
+    new_lower = (new_name or "").lower()
+    old_lower = (old_name or "").lower()
+    return any(name.lower() == new_lower and name.lower() != old_lower for name in local_names)
 
 
 def _unique_preserve_order(values: list[str]) -> list[str]:

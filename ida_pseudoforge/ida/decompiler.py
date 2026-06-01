@@ -12,11 +12,13 @@ try:
     import ida_hexrays  # type: ignore
     import ida_kernwin  # type: ignore
     import idaapi  # type: ignore
+    import idc  # type: ignore
 except Exception:
     ida_funcs = None
     ida_hexrays = None
     ida_kernwin = None
     idaapi = None
+    idc = None
 
 
 _LVAR_LOCATION_SCALAR_MEMBERS = (
@@ -110,6 +112,55 @@ def capture_current_lvars() -> list[LocalVariable]:
 
     with trace_scope("decompiler.capture_lvars.run_on_main_thread"):
         return run_on_main_thread(do_capture, write=False)
+
+
+def capture_function_by_name(name: str) -> FunctionCapture | None:
+    if ida_hexrays is None or ida_funcs is None:
+        return None
+
+    def do_capture() -> FunctionCapture | None:
+        ea = _function_ea_by_name(name)
+        if ea is None:
+            return None
+        func = ida_funcs.get_func(ea)
+        if func is None:
+            return None
+        cfunc = ida_hexrays.decompile(func)
+        if cfunc is None:
+            return None
+        pseudocode = _cfunc_text(cfunc)
+        function_name = ida_funcs.get_func_name(func.start_ea) or name
+        capture = capture_from_pseudocode(pseudocode, name=function_name, ea=int(func.start_ea))
+        capture.lvars = merge_lvars_from_text_and_cfunc(capture.lvars, _extract_lvars_from_cfunc(cfunc))
+        return capture
+
+    with trace_scope("decompiler.capture_by_name.run_on_main_thread", function=name):
+        return run_on_main_thread(do_capture, write=False)
+
+
+def _function_ea_by_name(name: str) -> int | None:
+    if not name:
+        return None
+    badaddr = getattr(idaapi, "BADADDR", None) if idaapi is not None else None
+    if idc is not None:
+        getter = getattr(idc, "get_name_ea_simple", None)
+        if callable(getter):
+            try:
+                ea = int(getter(name))
+                if badaddr is None or ea != int(badaddr):
+                    return ea
+            except Exception:
+                pass
+    if idaapi is not None:
+        getter = getattr(idaapi, "get_name_ea", None)
+        if callable(getter):
+            try:
+                ea = int(getter(int(badaddr or 0), name))
+                if badaddr is None or ea != int(badaddr):
+                    return ea
+            except Exception:
+                pass
+    return None
 
 
 def _capture_from_current_pseudocode_view() -> tuple[FunctionCapture, Any] | None:

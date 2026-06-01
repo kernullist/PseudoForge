@@ -28,6 +28,12 @@ from ida_pseudoforge.core.forge_store import (
     render_forge_function_section,
     upsert_forge_section,
 )
+from ida_pseudoforge.core.helper_aliases import (
+    RuntimeHelperAlias,
+    apply_runtime_helper_aliases,
+    infer_runtime_helper_aliases_from_texts,
+    runtime_helper_alias_summary,
+)
 from ida_pseudoforge.core.lvar_analysis import build_clean_plan
 from ida_pseudoforge.core.plan_schema import LocalVariable
 from ida_pseudoforge.core.render import render_cleaned_pseudocode
@@ -142,6 +148,17 @@ def main(argv: list[str] | None = None) -> int:
                 exit_code = 1
                 if args.stop_on_error:
                     break
+
+        if forge_writer is not None:
+            forge_writer.close()
+            forge_writer = None
+        postprocess_result = _apply_runtime_helper_aliases_to_batch_outputs(
+            forge_path,
+            compare_dir,
+            args.compare_context,
+        )
+        if postprocess_result.get("aliases"):
+            reporter.write(postprocess_result)
 
         reporter.write(
             {
@@ -512,6 +529,104 @@ def _write_compare_artifacts(
         "forge_lines": len(section_output.splitlines()),
         "diff_lines": len(diff_output.splitlines()),
     }
+
+
+def _apply_runtime_helper_aliases_to_batch_outputs(
+    forge_path: Path,
+    compare_dir: Path | None,
+    context_lines: int,
+) -> dict[str, Any]:
+    cleaned_paths: list[Path] = []
+    cleaned_texts: list[str] = []
+    if compare_dir is not None:
+        cleaned_dir = compare_dir / "cleaned"
+        if cleaned_dir.exists():
+            cleaned_paths = sorted(cleaned_dir.glob("*.cpp"))
+            cleaned_texts = [
+                path.read_text(encoding="utf-8", errors="replace")
+                for path in cleaned_paths
+            ]
+
+    aggregate_text = ""
+    if forge_path.exists():
+        aggregate_text = forge_path.read_text(encoding="utf-8", errors="replace")
+    if not cleaned_texts and aggregate_text:
+        cleaned_texts = [section.text for section in parse_forge_function_sections(aggregate_text)]
+
+    aliases = infer_runtime_helper_aliases_from_texts(cleaned_texts)
+    if not aliases:
+        return {
+            "event": "postprocess",
+            "phase": "runtime_helper_aliases",
+            "status": "unchanged",
+            "aliases": [],
+            "rewritten_files": 0,
+        }
+
+    rewritten_files = 0
+    if aggregate_text:
+        updated = apply_runtime_helper_aliases(aggregate_text, aliases)
+        if updated != aggregate_text:
+            forge_path.write_text(updated, encoding="utf-8")
+            rewritten_files += 1
+
+    if compare_dir is not None:
+        rewritten_files += _apply_runtime_helper_aliases_to_compare_dir(
+            compare_dir,
+            aliases,
+            context_lines,
+        )
+
+    return {
+        "event": "postprocess",
+        "phase": "runtime_helper_aliases",
+        "status": "ok",
+        "aliases": runtime_helper_alias_summary(aliases),
+        "rewritten_files": rewritten_files,
+    }
+
+
+def _apply_runtime_helper_aliases_to_compare_dir(
+    compare_dir: Path,
+    aliases: dict[str, RuntimeHelperAlias],
+    context_lines: int,
+) -> int:
+    rewritten = 0
+    for relative_dir in ("cleaned", "forge"):
+        root = compare_dir / relative_dir
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*.cpp" if relative_dir == "cleaned" else "*.forge")):
+            original = path.read_text(encoding="utf-8", errors="replace")
+            updated = apply_runtime_helper_aliases(original, aliases)
+            if updated == original:
+                continue
+            path.write_text(updated, encoding="utf-8")
+            rewritten += 1
+            if relative_dir == "cleaned":
+                _refresh_compare_diff(compare_dir, path, context_lines)
+    return rewritten
+
+
+def _refresh_compare_diff(compare_dir: Path, cleaned_path: Path, context_lines: int) -> None:
+    raw_path = compare_dir / "raw" / cleaned_path.name
+    diff_path = compare_dir / "diff" / cleaned_path.with_suffix(".diff").name
+    if not raw_path.exists():
+        return
+    raw_output = raw_path.read_text(encoding="utf-8", errors="replace")
+    cleaned_output = cleaned_path.read_text(encoding="utf-8", errors="replace")
+    stem = cleaned_path.stem
+    diff_output = "".join(
+        difflib.unified_diff(
+            raw_output.splitlines(keepends=True),
+            cleaned_output.splitlines(keepends=True),
+            fromfile="raw/%s.cpp" % stem,
+            tofile="cleaned/%s.cpp" % stem,
+            n=max(0, int(context_lines)),
+        )
+    )
+    diff_path.parent.mkdir(parents=True, exist_ok=True)
+    diff_path.write_text(diff_output, encoding="utf-8")
 
 
 def _function_file_stem(ea: int, name: str) -> str:

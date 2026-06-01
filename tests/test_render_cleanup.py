@@ -161,6 +161,68 @@ class RenderCleanupTests(unittest.TestCase):
         self.assertIn("++alias;", rendered)
         self.assertIn("Probe(alias);", rendered)
 
+    def test_constant_pointer_expression_alias_reuses_existing_local(self) -> None:
+        text = "\n".join(
+            [
+                "void sample(__int64 context)",
+                "{",
+                "  _QWORD **listHead;",
+                "  _QWORD *tail;",
+                "",
+                "  listHead = (_QWORD **)(context + 136);",
+                "  tail = *(_QWORD **)(context + 144);",
+                "  if ( *tail != context + 136 )",
+                "  {",
+                "    __fastfail(3u);",
+                "  }",
+                "}",
+            ]
+        )
+
+        rendered = apply_generic_render_cleanups(text)
+
+        self.assertIn("listHead = (_QWORD **)(context + 136);", rendered)
+        self.assertIn("if ( *tail != listHead )", rendered)
+
+    def test_constant_pointer_expression_alias_preserves_call_cast(self) -> None:
+        text = "\n".join(
+            [
+                "void sample(__int64 context)",
+                "{",
+                "  struct _NPAGED_LOOKASIDE_LIST *lookasideList;",
+                "  void *entry;",
+                "",
+                "  lookasideList = (struct _NPAGED_LOOKASIDE_LIST *)(context + 192);",
+                "  entry = ExAllocateFromNPagedLookasideList((PNPAGED_LOOKASIDE_LIST)(context + 192));",
+                "  ExFreeToNPagedLookasideList((PNPAGED_LOOKASIDE_LIST)(context + 192), entry);",
+                "}",
+            ]
+        )
+
+        rendered = apply_generic_render_cleanups(text)
+
+        self.assertIn("entry = ExAllocateFromNPagedLookasideList((PNPAGED_LOOKASIDE_LIST)lookasideList);", rendered)
+        self.assertIn("ExFreeToNPagedLookasideList((PNPAGED_LOOKASIDE_LIST)lookasideList, entry);", rendered)
+        self.assertNotIn("(PNPAGED_LOOKASIDE_LIST)(context + 192)", rendered)
+
+    def test_constant_pointer_expression_alias_skips_mutated_base(self) -> None:
+        text = "\n".join(
+            [
+                "void sample(__int64 context, __int64 nextContext)",
+                "{",
+                "  _QWORD **listHead;",
+                "",
+                "  listHead = (_QWORD **)(context + 136);",
+                "  context = nextContext;",
+                "  Probe(context + 136);",
+                "}",
+            ]
+        )
+
+        rendered = apply_generic_render_cleanups(text)
+
+        self.assertIn("Probe(context + 136);", rendered)
+
     def test_unrolled_wide_array_copy_rewrites_to_qmemcpy(self) -> None:
         text = "\n".join(
             [

@@ -1073,6 +1073,14 @@ Completed:
 - [x] Ran review-mode validation after each quality-lift cycle, removed a direct
   decompiler-global address literal from production rewrite logic, and reran the
   no-PDB 46-function IDA batch.
+- [x] Added generic WDK API metadata-backed local rename recovery for
+  address-taken out parameters, API return locals, and API argument role locals;
+  added exact constant pointer-expression alias reuse for already established
+  local aliases; review mode fixed an over-broad pointer typedef check and a
+  case-variant rename collision before full validation.
+- [x] Reran the full no-PDB 46-function IDA batch after the follow-up lift:
+  46 processed, 46 succeeded, 0 skipped, 0 failed, LLM disabled for all
+  functions.
 
 ### Current Evidence
 
@@ -1081,11 +1089,19 @@ Completed:
 - `pseudoforge_ida_e2e_quality_report.md` records the 2026-06-01 no-PDB kernel
   pattern driver quality loop, including baseline, cycle, and review-correction
   artifacts.
-- The final no-PDB quality-lift run is
-  `pseudoforge_out\ida_e2e_quality\cycle12_20260601_211425`: 46 processed,
-  46 succeeded, 0 skipped, 0 failed, LLM disabled for all functions.
+- The latest no-PDB quality-lift run is
+  `pseudoforge_out\ida_e2e_quality\helperalias_memset_20260601_223437`: 46
+  processed, 46 succeeded, 0 skipped, 0 failed, LLM disabled for all
+  functions.
+- Completed in the latest cycle: generic runtime memory-helper alias inference.
+  It classifies strongly evidenced `sub_*` memory-fill/memory-move helpers by
+  signature and body behavior, renders caller sites as standard `memset` or
+  `memmove` calls, and opportunistically probes only direct callees in
+  interactive IDA use so users do not need to analyze every function first.
 - The quality scorer improved the 46-function average from 61.98 in cycle4 to
-  65.83 in cycle12, while generic argument artifacts dropped from 252 to 60.
+  67.37 in the latest run. Compared with the postcommit baseline, compiler
+  local artifacts dropped from 872 to 818, raw pointer-offset findings dropped
+  from 73 to 70, and unresolved helper-call findings dropped from 90 to 74.
 
 ### Problem
 

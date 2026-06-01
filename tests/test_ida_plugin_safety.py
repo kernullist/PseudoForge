@@ -162,6 +162,62 @@ class IdaPluginSafetyTests(unittest.TestCase):
         state.clear()
         self.assertIsNone(state.get())
 
+    def test_render_cleaned_aliases_direct_runtime_helper_without_full_batch(self):
+        capture = FunctionCapture(
+            ea=0x140001100,
+            name="Caller",
+            prototype="void __fastcall Caller(char *buffer)",
+            pseudocode=(
+                "void __fastcall Caller(char *buffer)\n"
+                "{\n"
+                "  sub_140001000(buffer, 0, 64LL);\n"
+                "}\n"
+            ),
+            lvars=[LocalVariable("buffer", "char *", True, 0)],
+            source_path=r"F:\target\driver.sys",
+        )
+        plan = CleanPlan(
+            function_ea=capture.ea,
+            function_name=capture.name,
+            input_fingerprint=capture.input_fingerprint(),
+        )
+        helper_capture = FunctionCapture(
+            ea=0x140001000,
+            name="sub_140001000",
+            prototype="__int64 __fastcall sub_140001000(char *a1, unsigned __int8 a2, unsigned __int64 a3)",
+            pseudocode=(
+                "__int64 __fastcall sub_140001000(char *a1, unsigned __int8 a2, unsigned __int64 a3)\n"
+                "{\n"
+                "  __int64 result;\n"
+                "  __int64 v4;\n"
+                "\n"
+                "  result = (__int64)a1;\n"
+                "  v4 = 0x101010101010101LL * a2;\n"
+                "  if ( a3 >= 4 )\n"
+                "  {\n"
+                "    *(_DWORD *)a1 = v4;\n"
+                "    *(_DWORD *)&a1[a3 - 4] = v4;\n"
+                "  }\n"
+                "  return result;\n"
+                "}\n"
+            ),
+            lvars=[
+                LocalVariable("a1", "char *", True, 0),
+                LocalVariable("a2", "unsigned __int8", True, 1),
+                LocalVariable("a3", "unsigned __int64", True, 2),
+            ],
+            source_path=r"F:\target\driver.sys",
+        )
+        old_capture = actions_module.capture_function_by_name
+        actions_module.capture_function_by_name = lambda name: helper_capture if name == "sub_140001000" else None
+        try:
+            rendered = actions_module._render_cleaned_with_direct_helper_aliases(capture, plan)
+        finally:
+            actions_module.capture_function_by_name = old_capture
+
+        self.assertIn("memset(buffer, 0, 64LL);", rendered)
+        self.assertNotIn("sub_140001000(buffer", rendered)
+
     def test_plugin_analysis_session_normalizes_windows_path_identity(self):
         capture = _capture()
         plan = _plan(capture)

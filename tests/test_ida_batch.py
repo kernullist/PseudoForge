@@ -9,6 +9,7 @@ from ida_pseudoforge.core.forge_store import render_forge_function_section
 from ida_pseudoforge.core.lvar_analysis import build_clean_plan
 from ida_pseudoforge.core.render import render_cleaned_pseudocode
 from tools.pseudoforge_ida_batch import (
+    _apply_runtime_helper_aliases_to_batch_outputs,
     _batch_progress_record,
     _build_plan_with_optional_llm,
     _cancel_file_requested,
@@ -154,6 +155,54 @@ __int64 __fastcall LlmBatchSample(int a1)
         stem = _function_file_stem(0x1234, "bad:name<with>|chars?and spaces")
 
         self.assertEqual(stem, "0000000000001234_bad_name_with_chars_and_spaces")
+
+    def test_ida_batch_postprocess_aliases_runtime_memory_helpers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compare_dir = root / "compare"
+            raw_dir = compare_dir / "raw"
+            cleaned_dir = compare_dir / "cleaned"
+            diff_dir = compare_dir / "diff"
+            raw_dir.mkdir(parents=True)
+            cleaned_dir.mkdir(parents=True)
+            diff_dir.mkdir(parents=True)
+            helper_name = "0000000180001000_sub_180001000.cpp"
+            caller_name = "0000000180001100_Caller.cpp"
+            helper_text = """
+__int64 __fastcall sub_180001000(char *destination, unsigned __int8 fillByte, unsigned __int64 byteCount)
+{
+  __int64 result;
+  __int64 fillPattern;
+
+  result = (__int64)destination;
+  fillPattern = 0x101010101010101LL * fillByte;
+  if ( byteCount >= 4 )
+  {
+    *(_DWORD *)destination = fillPattern;
+    *(_DWORD *)&destination[byteCount - 4] = fillPattern;
+  }
+  return result;
+}
+""".strip() + "\n"
+            caller_text = """
+void __fastcall Caller(char *buffer)
+{
+  sub_180001000(buffer, 0, 64LL);
+}
+""".strip() + "\n"
+            (raw_dir / helper_name).write_text(helper_text, encoding="utf-8")
+            (raw_dir / caller_name).write_text(caller_text, encoding="utf-8")
+            (cleaned_dir / helper_name).write_text(helper_text, encoding="utf-8")
+            (cleaned_dir / caller_name).write_text(caller_text, encoding="utf-8")
+
+            result = _apply_runtime_helper_aliases_to_batch_outputs(root / "missing.forge", compare_dir, 1)
+
+            updated_caller = (cleaned_dir / caller_name).read_text(encoding="utf-8")
+            updated_diff = (diff_dir / caller_name.replace(".cpp", ".diff")).read_text(encoding="utf-8")
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["aliases"][0]["alias_name"], "memset")
+            self.assertIn("memset(buffer, 0, 64LL);", updated_caller)
+            self.assertIn("+  memset(buffer, 0, 64LL);", updated_diff)
 
     def test_ida_batch_progress_record_identifies_next_function(self) -> None:
         record = _batch_progress_record(0x140001000, "NtOpenProcess", 4, 25)

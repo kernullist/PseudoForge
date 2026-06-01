@@ -215,6 +215,81 @@ void __fastcall AmbiguousLookasideEntryAllocationSample(__int64 context)
 """
 
 
+API_OUT_PARAMETER_LOCAL_SAMPLE = r"""
+void __fastcall ApiOutParameterLocalSample()
+{
+  __int64 v16; // [rsp+50h] [rbp+8h] BYREF
+
+  KeQuerySystemTimePrecise(&v16);
+  Sink(v16);
+}
+"""
+
+
+API_RESULT_LOCAL_SAMPLE = r"""
+void __fastcall ApiResultLocalSample(__int64 context)
+{
+  KIRQL v23;
+  HANDLE v24;
+
+  v23 = KeAcquireSpinLockRaiseToDpc((PKSPIN_LOCK)(context + 128));
+  v24 = PsGetCurrentThreadId();
+  KeReleaseSpinLock((PKSPIN_LOCK)(context + 128), v23);
+  Sink(v24);
+}
+"""
+
+
+API_RESULT_PASCAL_LOCAL_SAMPLE = r"""
+void __fastcall ApiResultPascalLocalSample(PVOID object)
+{
+  HANDLE CurrentThreadId;
+  HANDLE ProcessId;
+  PIO_WORKITEM WorkItem;
+
+  CurrentThreadId = PsGetCurrentThreadId();
+  ProcessId = PsGetProcessId((PEPROCESS)object);
+  WorkItem = IoAllocateWorkItem((PDEVICE_OBJECT)object);
+  Sink(CurrentThreadId, ProcessId, WorkItem);
+}
+"""
+
+
+API_ARGUMENT_LOCAL_SAMPLE = r"""
+void __fastcall ApiArgumentLocalSample(__int64 context, void *entry)
+{
+  struct _NPAGED_LOOKASIDE_LIST *v8;
+
+  v8 = (struct _NPAGED_LOOKASIDE_LIST *)(context + 192);
+  ExFreeToNPagedLookasideList(v8, entry);
+}
+"""
+
+
+API_ARGUMENT_AMBIGUOUS_SAMPLE = r"""
+void __fastcall ApiArgumentAmbiguousSample(void *entry)
+{
+  struct _NPAGED_LOOKASIDE_LIST *v8;
+  struct _NPAGED_LOOKASIDE_LIST *v9;
+
+  ExFreeToNPagedLookasideList(v8, entry);
+  ExFreeToNPagedLookasideList(v9, entry);
+}
+"""
+
+
+API_ARGUMENT_CASE_VARIANT_SAMPLE = r"""
+void __fastcall ApiArgumentCaseVariantSample()
+{
+  struct _MDL *Mdl;
+  struct _MDL *v6;
+
+  IoFreeMdl(v6);
+  Sink(Mdl);
+}
+"""
+
+
 STRUCTURE_BASE_PARAMETER_SAMPLE = r"""
 void __fastcall StructureBaseParameterSample(__int64 a1)
 {
@@ -643,6 +718,71 @@ __int64 __fastcall TextLvarMergeSample()
         self.assertNotIn("lookasideEntry", rename_map.values())
         self.assertIn("v9 = ExAllocateFromNPagedLookasideList", rendered)
         self.assertIn("v10 = ExAllocateFromNPagedLookasideList", rendered)
+
+    def test_api_out_parameter_local_gets_profile_parameter_name(self) -> None:
+        capture = capture_from_pseudocode(API_OUT_PARAMETER_LOCAL_SAMPLE)
+        plan = build_clean_plan(capture)
+        rename_map = {item.old: item.new for item in plan.renames if item.apply}
+        rendered = render_cleaned_pseudocode(capture, plan)
+
+        self.assertEqual(rename_map["v16"], "currentTime")
+        self.assertIn("KeQuerySystemTimePrecise(&currentTime);", rendered)
+        self.assertIn("Sink(currentTime);", rendered)
+
+    def test_api_result_locals_get_profile_backed_names(self) -> None:
+        capture = capture_from_pseudocode(API_RESULT_LOCAL_SAMPLE)
+        plan = build_clean_plan(capture)
+        rename_map = {item.old: item.new for item in plan.renames if item.apply}
+        rendered = render_cleaned_pseudocode(capture, plan)
+
+        self.assertEqual(rename_map["v23"], "oldIrql")
+        self.assertEqual(rename_map["v24"], "currentThreadId")
+        self.assertIn("oldIrql = KeAcquireSpinLockRaiseToDpc", rendered)
+        self.assertIn("currentThreadId = PsGetCurrentThreadId();", rendered)
+        self.assertIn("KeReleaseSpinLock((PKSPIN_LOCK)(context + 128), oldIrql);", rendered)
+
+    def test_api_result_pascal_locals_get_lower_camel_names(self) -> None:
+        capture = capture_from_pseudocode(API_RESULT_PASCAL_LOCAL_SAMPLE)
+        plan = build_clean_plan(capture)
+        rename_map = {item.old: item.new for item in plan.renames if item.apply}
+        rendered = render_cleaned_pseudocode(capture, plan)
+
+        self.assertEqual(rename_map["CurrentThreadId"], "currentThreadId")
+        self.assertEqual(rename_map["ProcessId"], "processId")
+        self.assertEqual(rename_map["WorkItem"], "workItem")
+        self.assertIn("currentThreadId = PsGetCurrentThreadId();", rendered)
+        self.assertIn("processId = PsGetProcessId((PEPROCESS)object);", rendered)
+        self.assertIn("workItem = IoAllocateWorkItem((PDEVICE_OBJECT)object);", rendered)
+
+    def test_api_argument_local_gets_profile_parameter_name(self) -> None:
+        capture = capture_from_pseudocode(API_ARGUMENT_LOCAL_SAMPLE)
+        plan = build_clean_plan(capture)
+        rename_map = {item.old: item.new for item in plan.renames if item.apply}
+        rendered = render_cleaned_pseudocode(capture, plan)
+
+        self.assertEqual(rename_map["v8"], "lookasideList")
+        self.assertIn("lookasideList = (struct _NPAGED_LOOKASIDE_LIST *)(context + 192);", rendered)
+        self.assertIn("ExFreeToNPagedLookasideList(lookasideList, entry);", rendered)
+
+    def test_api_argument_local_skips_ambiguous_same_target(self) -> None:
+        capture = capture_from_pseudocode(API_ARGUMENT_AMBIGUOUS_SAMPLE)
+        plan = build_clean_plan(capture)
+        rename_map = {item.old: item.new for item in plan.renames if item.apply}
+        rendered = render_cleaned_pseudocode(capture, plan)
+
+        self.assertNotIn("lookasideList", rename_map.values())
+        self.assertIn("ExFreeToNPagedLookasideList(v8, entry);", rendered)
+        self.assertIn("ExFreeToNPagedLookasideList(v9, entry);", rendered)
+
+    def test_api_argument_local_skips_case_variant_existing_local(self) -> None:
+        capture = capture_from_pseudocode(API_ARGUMENT_CASE_VARIANT_SAMPLE)
+        plan = build_clean_plan(capture)
+        rename_map = {item.old: item.new for item in plan.renames if item.apply}
+        rendered = render_cleaned_pseudocode(capture, plan)
+
+        self.assertNotIn("mdl", rename_map.values())
+        self.assertIn("IoFreeMdl(v6);", rendered)
+        self.assertIn("Sink(Mdl);", rendered)
 
     def test_optimized_memmove_parameters_get_dataflow_names(self) -> None:
         capture = capture_from_pseudocode(OPTIMIZED_MEMMOVE_PARAMETER_SAMPLE)

@@ -350,6 +350,130 @@ python -B .\tools\score_pseudoforge_quality.py --compare-dir <cycle12>\compare -
 - Complex cleanup labels in large callback paths are still preserved when the
   control-flow evidence is not strong enough to restructure safely.
 
+## Follow-up Generic API Metadata Lift
+
+Implemented after the postcommit review pass:
+
+- Added generic WDK API metadata-backed rename recovery for:
+  - address-taken local out parameters, such as profile parameter
+    `CurrentTime` -> `currentTime`
+  - API return locals, such as `KeAcquireSpinLockRaiseToDpc` -> `oldIrql`
+    and `PsGetCurrentThreadId` -> `currentThreadId`
+  - API argument role locals, such as `ExFreeToNPagedLookasideList` parameter
+    `Lookaside` -> `lookasideList`
+- Added exact constant pointer-expression alias reuse. When a local is assigned
+  a stable `(base + offset)` pointer expression, later equivalent uses of that
+  expression can be rendered through the local alias instead of repeating the
+  raw offset.
+- Review mode found and fixed two generic-rule risks before final validation:
+  - pointer-typedef detection was moved into an API-profile-only helper so
+    runtime-memory size/type checks do not treat unrelated `P...` scalar names
+    as pointers
+  - generic API argument renames now yield when the desired target would shadow
+    an existing local that differs only by case
+
+Latest output directory:
+
+```text
+pseudoforge_out\ida_e2e_quality\qualitylift_20260601_220431
+```
+
+Latest result:
+
+```text
+Processed: 46
+Succeeded: 46
+Skipped: 0
+Failed: 0
+Warnings: 0
+LLM status: disabled=46
+Compare artifacts: 46
+```
+
+Quality score movement from the postcommit baseline:
+
+| Metric | Postcommit | Latest |
+| --- | ---: | ---: |
+| Average score | 65.83 | 66.63 |
+| Average opportunity | 40.80 | 40.02 |
+| Average reward | 7.20 | 7.39 |
+| `compiler_local_name` count | 872 | 818 |
+| `raw_pointer_offset` count | 73 | 70 |
+| `artifact_reduction` count | 518 | 554 |
+
+Representative cleaned output:
+
+```cpp
+lookasideList = (struct _NPAGED_LOOKASIDE_LIST *)(context + 192);
+lookasideEntry = ExAllocateFromNPagedLookasideList((PNPAGED_LOOKASIDE_LIST)lookasideList);
+oldIrql = KeAcquireSpinLockRaiseToDpc((PKSPIN_LOCK)(context + 128));
+KeQuerySystemTimePrecise(&currentTime);
+ExFreeToNPagedLookasideList(lookasideList, entry);
+KeReleaseSpinLock((PKSPIN_LOCK)(context + 128), oldIrql);
+```
+
+## Runtime Helper Alias Follow-up
+
+The previous quality-lift pass still left many caller sites with unresolved
+runtime helper calls even when the helper implementation itself had already
+been recognized as an optimized memory primitive.
+
+Implemented generic rule:
+
+- Infer runtime memory-fill and memory-move helpers only from no-PDB evidence:
+  decompiler-style `sub_*` name, three-argument signature after deterministic
+  parameter recovery, first-parameter return behavior, byte-count control, and
+  memory write/read body patterns.
+- Render caller sites through standard `memset` or `memmove` calls in batch
+  compare artifacts and aggregate `.forge` output after all selected functions
+  are processed, while preserving the helper function definition name.
+- In interactive IDA use, do not require full-function preanalysis. PseudoForge
+  probes only direct `sub_*` callees from the current function, runs the same
+  deterministic helper evidence, and leaves calls unchanged when evidence is
+  missing.
+- Review mode fixed a false-negative risk where a result-alias comparison such
+  as `result == 0` could be mistaken for alias mutation.
+
+Latest output directory:
+
+```text
+pseudoforge_out\ida_e2e_quality\helperalias_memset_20260601_223437
+```
+
+Latest result:
+
+```text
+Processed: 46
+Succeeded: 46
+Skipped: 0
+Failed: 0
+Warnings: 0
+LLM status: disabled=46
+Compare artifacts: 46
+Runtime helper aliases: sub_1400045C0 -> memset
+Rewritten files: 21
+```
+
+Quality score movement from the previous quality-lift run:
+
+| Metric | Previous | Latest |
+| --- | ---: | ---: |
+| Average score | 66.63 | 67.37 |
+| Average opportunity | 40.02 | 39.33 |
+| Average reward | 7.39 | 7.52 |
+| `unresolved_helper_call` count | 90 | 74 |
+| `artifact_reduction` count | 554 | 586 |
+
+Representative cleaned output:
+
+```cpp
+memset(sourceBuffer, 0LL, 64LL);
+memset(copyBuffer, 0LL, 64LL);
+```
+
+Remaining quality blockers are now dominated by structure/layout recovery and
+compiler-local dataflow recovery rather than simple helper-call opacity.
+
 ## Final Judgment
 
 For the current no-PDB kernel pattern driver, PseudoForge now reaches practical

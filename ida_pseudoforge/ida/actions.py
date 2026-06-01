@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from ida_pseudoforge.config import (
@@ -14,7 +15,14 @@ from ida_pseudoforge.core.forge_store import (
     find_forge_function_section,
     write_forge_function,
 )
+from ida_pseudoforge.core.helper_aliases import (
+    RuntimeHelperAlias,
+    apply_runtime_helper_aliases,
+    infer_runtime_helper_aliases_from_texts,
+    runtime_helper_alias_summary,
+)
 from ida_pseudoforge.core.lvar_analysis import build_clean_plan
+from ida_pseudoforge.core.normalize import extract_calls
 from ida_pseudoforge.core.plan_schema import CleanPlan, FunctionCapture
 from ida_pseudoforge.core.render import render_cleaned_pseudocode
 from ida_pseudoforge.core.rule_diagnostics import format_rule_report_summary
@@ -27,7 +35,7 @@ from ida_pseudoforge.ida.async_runner import (
     request_group_cancel,
     run_background,
 )
-from ida_pseudoforge.ida.decompiler import capture_current_function, capture_current_lvars
+from ida_pseudoforge.ida.decompiler import capture_current_function, capture_current_lvars, capture_function_by_name
 from ida_pseudoforge.ida.llm_config_dialog import ask_llm_config, format_llm_summary
 from ida_pseudoforge.ida.preview_config_dialog import ask_preview_config, format_preview_summary
 from ida_pseudoforge.ida.profile_config_dialog import ask_profile_dir, format_profile_summary
@@ -64,6 +72,8 @@ except Exception:
 
 PLUGIN_STATE_GROUP = "plugin_state"
 _ANALYSIS_STATE = PluginAnalysisState()
+_DIRECT_HELPER_ALIAS_MAX_CALLEES = 8
+_DECOMPILER_HELPER_RE = re.compile(r"^(?:sub|j_sub)_[0-9A-Fa-f]+$")
 
 
 def analyze_current_function(purpose: str = "analyze") -> tuple[FunctionCapture, CleanPlan]:
@@ -519,13 +529,64 @@ def _default_output_dir() -> Path:
 
 def _write_forge_snapshot(capture: FunctionCapture, plan: CleanPlan) -> tuple[Path, str]:
     target_path, forge_path = run_on_main_thread(_target_and_forge_paths, write=False)
-    cleaned = render_cleaned_pseudocode(capture, plan)
+    cleaned = _render_cleaned_with_direct_helper_aliases(capture, plan)
     forge_text = write_forge_function(forge_path, target_path, capture, plan, cleaned)
     log_event(
         "forge.write path=\"%s\" function=\"%s\" ea=0x%X chars=%d"
         % (_ascii_for_log(str(forge_path)), _ascii_for_log(capture.name), capture.ea, len(forge_text))
     )
     return forge_path, forge_text
+
+
+def _render_cleaned_with_direct_helper_aliases(capture: FunctionCapture, plan: CleanPlan) -> str:
+    cleaned = render_cleaned_pseudocode(capture, plan)
+    aliases = _direct_runtime_helper_aliases(cleaned, capture)
+    if not aliases:
+        return cleaned
+    log_event(
+        "analysis.helper_aliases function=\"%s\" ea=0x%X aliases=%s"
+        % (_ascii_for_log(capture.name), capture.ea, _ascii_for_log(str(runtime_helper_alias_summary(aliases))))
+    )
+    return apply_runtime_helper_aliases(cleaned, aliases)
+
+
+def _direct_runtime_helper_aliases(cleaned: str, capture: FunctionCapture) -> dict[str, RuntimeHelperAlias]:
+    helper_texts = []
+    for call_name in _direct_decompiler_helper_calls(cleaned, capture.name):
+        if len(helper_texts) >= _DIRECT_HELPER_ALIAS_MAX_CALLEES:
+            break
+        try:
+            helper_capture = capture_function_by_name(call_name)
+        except Exception as exc:
+            log_event(
+                "analysis.helper_alias.capture_failed caller=\"%s\" callee=\"%s\" error=\"%s\""
+                % (_ascii_for_log(capture.name), _ascii_for_log(call_name), _ascii_for_log(str(exc)))
+            )
+            continue
+        if helper_capture is None or helper_capture.ea == capture.ea:
+            continue
+        try:
+            helper_plan = build_clean_plan(helper_capture)
+            helper_texts.append(render_cleaned_pseudocode(helper_capture, helper_plan))
+        except Exception as exc:
+            log_event(
+                "analysis.helper_alias.render_failed caller=\"%s\" callee=\"%s\" error=\"%s\""
+                % (_ascii_for_log(capture.name), _ascii_for_log(call_name), _ascii_for_log(str(exc)))
+            )
+    return infer_runtime_helper_aliases_from_texts(helper_texts)
+
+
+def _direct_decompiler_helper_calls(text: str, current_name: str) -> list[str]:
+    result = []
+    seen = set()
+    for call_name in extract_calls(text):
+        if call_name == current_name or not _DECOMPILER_HELPER_RE.match(call_name):
+            continue
+        if call_name in seen:
+            continue
+        seen.add(call_name)
+        result.append(call_name)
+    return result
 
 
 def _set_capture_source_path(capture: FunctionCapture) -> None:
@@ -618,7 +679,7 @@ def _show_analysis_preview(capture: FunctionCapture, plan: CleanPlan) -> None:
         target_path, forge_path = _target_and_forge_paths()
     except Exception as exc:
         log_event("preview.analysis.unavailable error=\"%s\"" % _ascii_for_log(str(exc)))
-        cleaned = render_cleaned_pseudocode(capture, plan)
+        cleaned = _render_cleaned_with_direct_helper_aliases(capture, plan)
         show_text_view(
             "PseudoForge: %s 0x%X" % (capture.name, capture.ea),
             cleaned,
@@ -632,7 +693,7 @@ def _show_analysis_preview(capture: FunctionCapture, plan: CleanPlan) -> None:
         return
 
     if side_by_side_preview_enabled():
-        cleaned = render_cleaned_pseudocode(capture, plan)
+        cleaned = _render_cleaned_with_direct_helper_aliases(capture, plan)
         target_stem = target_path.stem
         show_text_view(
             "PseudoForge: %s!%s 0x%X" % (target_stem, capture.name, capture.ea),
@@ -669,7 +730,7 @@ def _show_analysis_preview(capture: FunctionCapture, plan: CleanPlan) -> None:
             if _show_forge_section_text(target_path, forge_path, forge_text, capture.ea, capture.name):
                 return
 
-    cleaned = render_cleaned_pseudocode(capture, plan)
+    cleaned = _render_cleaned_with_direct_helper_aliases(capture, plan)
     target_stem = target_path.stem
     show_text_view(
         "PseudoForge: %s!%s 0x%X" % (target_stem, capture.name, capture.ea),
