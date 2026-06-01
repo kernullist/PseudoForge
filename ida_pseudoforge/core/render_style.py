@@ -475,9 +475,9 @@ def _split_top_level_operator(condition: str, operator: str) -> list[str]:
     index = 0
     while index < len(condition):
         char = condition[index]
-        if char == "(":
+        if char in {"(", "["}:
             depth += 1
-        elif char == ")":
+        elif char in {")", "]"}:
             depth = max(0, depth - 1)
         if depth == 0 and condition.startswith(operator, index):
             parts.append("".join(current).strip())
@@ -498,11 +498,9 @@ def _invert_simple_condition(condition: str) -> str:
         return ""
     if stripped.startswith("!"):
         return stripped[1:].strip()
-    comparison = re.match(
-        r"(?P<left>.+?)\s*(?P<op>>=|<=|==|!=|>|<)\s*(?P<right>.+)",
-        stripped,
-    )
+    comparison = _split_top_level_comparison(stripped)
     if comparison is not None:
+        left, op, right = comparison
         inverted_ops = {
             ">=": "<",
             "<=": ">",
@@ -511,15 +509,55 @@ def _invert_simple_condition(condition: str) -> str:
             "==": "!=",
             "!=": "==",
         }
-        op = comparison.group("op")
-        return "%s %s %s" % (
-            comparison.group("left").strip(),
-            inverted_ops[op],
-            comparison.group("right").strip(),
-        )
+        return "%s %s %s" % (left, inverted_ops[op], right)
     if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:->[A-Za-z_][A-Za-z0-9_]*|\.[A-Za-z_][A-Za-z0-9_]*)*$", stripped):
         return "!" + stripped
     return ""
+
+
+def _split_top_level_comparison(condition: str) -> tuple[str, str, str] | None:
+    depth = 0
+    index = 0
+    while index < len(condition):
+        char = condition[index]
+        if char in {"(", "["}:
+            depth += 1
+            index += 1
+            continue
+        if char in {")", "]"}:
+            depth = max(0, depth - 1)
+            index += 1
+            continue
+        if depth != 0:
+            index += 1
+            continue
+
+        for operator in (">=", "<=", "==", "!="):
+            if condition.startswith(operator, index) and _is_comparison_boundary(condition, index, operator):
+                left = condition[:index].strip()
+                right = condition[index + len(operator) :].strip()
+                if left and right:
+                    return left, operator, right
+        if char in {"<", ">"} and _is_comparison_boundary(condition, index, char):
+            left = condition[:index].strip()
+            right = condition[index + 1 :].strip()
+            if left and right:
+                return left, char, right
+        index += 1
+    return None
+
+
+def _is_comparison_boundary(condition: str, index: int, operator: str) -> bool:
+    previous_char = condition[index - 1] if index > 0 else ""
+    next_index = index + len(operator)
+    next_char = condition[next_index] if next_index < len(condition) else ""
+    if operator == ">" and (previous_char in {"-", ">"} or next_char == ">"):
+        return False
+    if operator == "<" and (previous_char == "<" or next_char == "<"):
+        return False
+    if operator in {">=", "<="} and previous_char in {operator[0], "-"}:
+        return False
+    return True
 
 
 def _outer_parentheses_wrap(text: str) -> bool:

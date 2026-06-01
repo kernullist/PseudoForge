@@ -174,6 +174,110 @@ class RenderStyleTests(unittest.TestCase):
         )
         self.assertNotIn("{\n  else", styled)
 
+    def test_nested_else_after_empty_if_preserves_pointer_member_access(self) -> None:
+        styled = enforce_generated_code_style(
+            "if ( (mdl->MdlFlags & 5) != 0 )\n"
+            "{\n"
+            "  else\n"
+            "  {\n"
+            "    (void)MapPages(mdl);\n"
+            "  }\n"
+            "}\n"
+        )
+
+        self.assertIn(
+            "if ( (mdl->MdlFlags & 5) == 0 )\n"
+            "{\n"
+            "  (void)MapPages(mdl);\n"
+            "}",
+            styled,
+        )
+        self.assertNotIn("mdl- <=", styled)
+        self.assertNotIn("{\n  else", styled)
+
+    def test_nested_else_after_empty_if_does_not_treat_shifts_as_comparisons(self) -> None:
+        styled = enforce_generated_code_style(
+            "if ( flags << 1 )\n"
+            "{\n"
+            "  else\n"
+            "  {\n"
+            "    Use(flags);\n"
+            "  }\n"
+            "}\n"
+        )
+
+        self.assertIn(
+            "if ( !(flags << 1) )\n"
+            "{\n"
+            "  Use(flags);\n"
+            "}",
+            styled,
+        )
+        self.assertNotIn("flags <= 1", styled)
+        self.assertNotIn("{\n  else", styled)
+
+        styled = enforce_generated_code_style(
+            "if ( flags >> 1 )\n"
+            "{\n"
+            "  else\n"
+            "  {\n"
+            "    Use(flags);\n"
+            "  }\n"
+            "}\n"
+        )
+
+        self.assertIn(
+            "if ( !(flags >> 1) )\n"
+            "{\n"
+            "  Use(flags);\n"
+            "}",
+            styled,
+        )
+        self.assertNotIn("flags <= > 1", styled)
+        self.assertNotIn("{\n  else", styled)
+
+    def test_nested_else_after_empty_if_ignores_subscript_comparisons(self) -> None:
+        styled = enforce_generated_code_style(
+            "if ( table[index < limit] != 0 )\n"
+            "{\n"
+            "  else\n"
+            "  {\n"
+            "    Use(table);\n"
+            "  }\n"
+            "}\n"
+        )
+
+        self.assertIn(
+            "if ( table[index < limit] == 0 )\n"
+            "{\n"
+            "  Use(table);\n"
+            "}",
+            styled,
+        )
+        self.assertNotIn("table[index >= limit]", styled)
+        self.assertNotIn("{\n  else", styled)
+
+    def test_nested_else_after_empty_if_ignores_subscript_logical_operators(self) -> None:
+        styled = enforce_generated_code_style(
+            "if ( ready && table[index || fallback] != 0 )\n"
+            "{\n"
+            "  else\n"
+            "  {\n"
+            "    Use(table);\n"
+            "  }\n"
+            "}\n"
+        )
+
+        self.assertIn(
+            "if ( !ready || table[index || fallback] == 0 )\n"
+            "{\n"
+            "  Use(table);\n"
+            "}",
+            styled,
+        )
+        self.assertNotIn("!(ready && table[index || fallback] != 0)", styled)
+        self.assertNotIn("{\n  else", styled)
+
     def test_nested_else_after_empty_if_with_complex_condition_is_repaired(self) -> None:
         styled = enforce_generated_code_style(
             "if ( Probe(buffer) && (flags & mask) )\n"
