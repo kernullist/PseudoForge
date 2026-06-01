@@ -940,6 +940,8 @@ Completed:
 - [x] Added a neutral base foreground to Qt side-by-side syntax highlighting and
   made block-comment highlighting line-local to avoid comment-green bleed into
   pseudocode.
+- [x] Reused the simple preview token-role classifier for side-by-side Qt
+  highlighting while leaving the simple custom viewer path unchanged.
 - [x] Reused the active raw Hex-Rays analysis session for cached
   current-function side-by-side preview when the session still matches the
   function, with a visible cleaned-only fallback warning when raw context is
@@ -973,7 +975,9 @@ Completed:
 - Search highlights every matched occurrence in both panes and uses a distinct
   active-match highlight for the currently selected result.
 - The side-by-side highlighter applies a neutral plain-text base before token
-  colors, so unhighlighted pseudocode stays readable under IDA dark themes.
+  colors and uses the same token-role classifier as the simple preview, so
+  unhighlighted pseudocode stays readable under IDA dark themes while token
+  categories stay consistent between preview modes.
 - Cached current-function preview can open side-by-side when the active analysis
   session still has matching raw pseudocode or the `.forge` section contains
   persisted raw pseudocode; legacy sections without stored raw context warn and

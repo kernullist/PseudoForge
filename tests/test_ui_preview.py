@@ -27,10 +27,9 @@ from ida_pseudoforge.ida.ui_preview import (
     _qt_horizontal_orientation,
     _search_line_matches,
     _search_text_matches,
-    _side_by_side_block_comment_spans,
+    _side_by_side_highlight_spans,
     _side_by_side_summary_text,
     _side_by_side_text_formats,
-    _side_by_side_highlight_rules,
     _scroll_editors_to_search_match,
     _size_policy_value,
     _syntax_highlight_lines,
@@ -408,11 +407,6 @@ class UiPreviewTests(unittest.TestCase):
         self.assertEqual(editors[1].selections[-1].format.background.rgb, _SIDE_BY_SIDE_SEARCH_CURRENT_BG)
         self.assertEqual(editors[1].selections[-1].cursor.positions, [(4, None), (10, "keep_anchor")])
 
-    def test_side_by_side_block_comment_highlight_is_line_local(self) -> None:
-        self.assertEqual(_side_by_side_block_comment_spans("code /* one */ tail"), [(5, 9)])
-        self.assertEqual(_side_by_side_block_comment_spans("code /* unterminated"), [(5, 15)])
-        self.assertEqual(_side_by_side_block_comment_spans("code only"), [])
-
     def test_side_by_side_formats_define_plain_foreground(self) -> None:
         class FakeColor:
             def __init__(self, red, green, blue) -> None:
@@ -432,23 +426,52 @@ class UiPreviewTests(unittest.TestCase):
         formats = _side_by_side_text_formats(FakeQtGui)
 
         self.assertIn("plain", formats)
-        self.assertEqual(formats["plain"].foreground.rgb, (220, 220, 220))
+        self.assertEqual(formats["plain"].foreground.rgb, (212, 212, 212))
+        self.assertEqual(formats["constant"].foreground.rgb, (197, 134, 192))
+        self.assertEqual(formats["type"].foreground.rgb, (78, 201, 176))
 
-    def test_side_by_side_highlight_rules_cover_cpp_roles(self) -> None:
-        role_matches = {
-            role
-            for pattern, role in _side_by_side_highlight_rules()
-            if pattern.search("#define STATUS_SUCCESS 0")
-            or pattern.search("if ( NT_SUCCESS(status) )")
-            or pattern.search("return 0xC0000001;")
-            or pattern.search("DbgPrint(\"status\"); // comment")
-        }
+    def test_side_by_side_highlight_spans_reuse_preview_token_roles(self) -> None:
+        spans = []
+        for line in [
+            "NTSTATUS status = STATUS_SUCCESS;",
+            "return DriverEntry('A', 0x10); // comment",
+        ]:
+            spans.extend(_side_by_side_highlight_spans(line))
+        roles = [role for _start, _length, role in spans]
+
+        self.assertIn("type", roles)
+        self.assertIn("constant", roles)
+        self.assertIn("keyword", roles)
+        self.assertIn("function", roles)
+        self.assertIn("char", roles)
+        self.assertIn("number", roles)
+        self.assertIn("comment", roles)
+
+    def test_side_by_side_highlight_spans_keep_comments_line_local(self) -> None:
+        self.assertEqual(_side_by_side_highlight_spans("code /* one */ tail"), [(5, 9, "comment")])
+        self.assertEqual(_side_by_side_highlight_spans("code /* unterminated")[-1], (5, 15, "comment"))
+        self.assertEqual(_side_by_side_highlight_spans("code only"), [])
+
+    def test_side_by_side_highlight_spans_match_preview_preprocessor_range(self) -> None:
+        self.assertEqual(_side_by_side_highlight_spans("  #define STATUS_SUCCESS 0"), [(0, 26, "preprocessor")])
+
+    def test_side_by_side_highlight_spans_cover_cpp_roles(self) -> None:
+        role_matches = set()
+        for line in [
+            "#define STATUS_SUCCESS 0",
+            "if ( NT_SUCCESS(status) )",
+            "status = STATUS_SUCCESS;",
+            "return 0xC0000001;",
+            "DbgPrint(\"status\", 'x'); // comment",
+        ]:
+            role_matches.update(role for _start, _length, role in _side_by_side_highlight_spans(line))
 
         self.assertIn("preprocessor", role_matches)
         self.assertIn("constant", role_matches)
         self.assertIn("keyword", role_matches)
         self.assertIn("number", role_matches)
         self.assertIn("string", role_matches)
+        self.assertIn("char", role_matches)
         self.assertIn("function", role_matches)
         self.assertIn("comment", role_matches)
 

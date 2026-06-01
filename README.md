@@ -163,9 +163,9 @@ Implemented:
 29. IDA analysis preview can try an experimental dockable side-by-side raw vs
     cleaned review panel through the persisted `Configure preview mode` setting
     or temporary `PSEUDOFORGE_PREVIEW_BACKEND` override, with a compact
-    warning/rule summary row, synchronized line search, and neutral-base Qt
-    syntax highlighting while preserving the existing `simplecustviewer_t`
-    fallback.
+    warning/rule summary row, synchronized line search, and side-by-side Qt
+    syntax highlighting that reuses the preview token-role classifier while
+    preserving the existing `simplecustviewer_t` fallback.
 30. IDA analyze/export/apply tasks support cooperative cancellation checkpoints,
     and headless IDA batch runs can stop at a cancel-file boundary while writing
     per-function start progress records.
@@ -474,8 +474,9 @@ mode configuration fallback.
 - Complex shared or fallthrough bodies point back to the normalized original pseudocode instead of emitting misleading fragments.
 - Native switches already present in the normalized original pseudocode are not duplicated in the auxiliary outline.
 - Viewer lines use IDA color tag syntax highlighting where practical; large previews automatically fall back to plain text.
-- Side-by-side dockable panes use Qt syntax highlighting where practical and
-  fall back to plain text when Qt highlighter APIs are unavailable.
+- Side-by-side dockable panes use Qt syntax highlighting where practical, reuse
+  the same token-role classifier as the simple preview, and fall back to plain
+  text when Qt highlighter APIs are unavailable.
 - Side-by-side search highlights every matched occurrence in both panes and
   uses a stronger highlight for the active `Prev`/`Next` match.
 - New `.forge` function sections persist raw Hex-Rays pseudocode in an encoded

@@ -614,26 +614,15 @@ def _side_by_side_highlighter_class(qt_gui):
         def __init__(self, document) -> None:
             super().__init__(document)
             self._formats = _side_by_side_text_formats(qt_gui)
-            self._rules = _side_by_side_highlight_rules()
 
         def highlightBlock(self, text: str) -> None:
             plain_format = self._formats.get("plain")
             if plain_format is not None and text:
                 self.setFormat(0, len(text), plain_format)
-            for pattern, role in self._rules:
+            for start_index, length, role in _side_by_side_highlight_spans(text):
                 text_format = self._formats.get(role)
                 if text_format is None:
                     continue
-                for match in pattern.finditer(text):
-                    self.setFormat(match.start(), match.end() - match.start(), text_format)
-            self._highlight_block_comments(text)
-
-        def _highlight_block_comments(self, text: str) -> None:
-            text_format = self._formats.get("comment")
-            if text_format is None:
-                return
-            self.setCurrentBlockState(0)
-            for start_index, length in _side_by_side_block_comment_spans(text):
                 self.setFormat(start_index, length, text_format)
 
     return _SideBySideSyntaxHighlighter
@@ -641,14 +630,16 @@ def _side_by_side_highlighter_class(qt_gui):
 
 def _side_by_side_text_formats(qt_gui) -> dict[str, object]:
     palette = {
-        "plain": (220, 220, 220),
-        "keyword": (86, 156, 214),
-        "constant": (78, 201, 176),
-        "number": (181, 206, 168),
-        "string": (206, 145, 120),
+        "plain": (212, 212, 212),
+        "char": (206, 145, 120),
         "comment": (106, 153, 85),
+        "constant": (197, 134, 192),
         "function": (220, 220, 170),
+        "keyword": (86, 156, 214),
+        "number": (181, 206, 168),
         "preprocessor": (197, 134, 192),
+        "string": (206, 145, 120),
+        "type": (78, 201, 176),
     }
     formats: dict[str, object] = {}
     for role, rgb in palette.items():
@@ -658,34 +649,45 @@ def _side_by_side_text_formats(qt_gui) -> dict[str, object]:
     return formats
 
 
-def _side_by_side_block_comment_spans(text: str) -> list[tuple[int, int]]:
-    spans: list[tuple[int, int]] = []
-    start_index = (text or "").find("/*")
-    while start_index >= 0:
-        end_index = text.find("*/", start_index + 2)
-        if end_index < 0:
-            spans.append((start_index, len(text) - start_index))
+def _side_by_side_highlight_spans(text: str) -> list[tuple[int, int, str]]:
+    if not text:
+        return []
+    spans: list[tuple[int, int, str]] = []
+    index = 0
+    while index < len(text):
+        comment_index = _find_next_comment_start(text, index)
+        if comment_index < 0:
+            spans.extend(_side_by_side_code_spans(text, index, len(text)))
             break
-        length = end_index - start_index + 2
-        spans.append((start_index, length))
-        start_index = text.find("/*", start_index + length)
+        if comment_index > index:
+            spans.extend(_side_by_side_code_spans(text, index, comment_index))
+        if text.startswith("//", comment_index):
+            spans.append((comment_index, len(text) - comment_index, "comment"))
+            break
+        end_index = text.find("*/", comment_index + 2)
+        if end_index < 0:
+            spans.append((comment_index, len(text) - comment_index, "comment"))
+            break
+        spans.append((comment_index, end_index - comment_index + 2, "comment"))
+        index = end_index + 2
     return spans
 
 
-def _side_by_side_highlight_rules() -> list[tuple[re.Pattern[str], str]]:
-    keyword_pattern = r"\b(?:%s)\b" % "|".join(re.escape(keyword) for keyword in sorted(_C_KEYWORDS))
-    function_pattern = r"\b(?!(?:%s)\b)[A-Za-z_][A-Za-z0-9_]*(?=\s*\()" % "|".join(
-        re.escape(keyword) for keyword in sorted(_C_KEYWORDS)
-    )
-    return [
-        (re.compile(r"^\s*#\s*[A-Za-z_][A-Za-z0-9_]*"), "preprocessor"),
-        (re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])+'"), "string"),
-        (re.compile(r"\b0x[0-9A-Fa-f]+[uUlL]*\b|\b\d+[uUlL]*\b"), "number"),
-        (re.compile(keyword_pattern), "keyword"),
-        (re.compile(r"\b[A-Z_][A-Z0-9_]{2,}\b"), "constant"),
-        (re.compile(function_pattern), "function"),
-        (re.compile(r"//.*"), "comment"),
-    ]
+def _side_by_side_code_spans(text: str, start_index: int, end_index: int) -> list[tuple[int, int, str]]:
+    segment = text[start_index:end_index]
+    if not segment:
+        return []
+    if segment.lstrip().startswith("#"):
+        return [(start_index, len(segment), "preprocessor")]
+
+    spans: list[tuple[int, int, str]] = []
+    for match in _TOKEN_RE.finditer(segment):
+        token = match.group(0)
+        role = _token_role(segment, match.start(), match.end(), token)
+        if not role:
+            continue
+        spans.append((start_index + match.start(), match.end() - match.start(), role))
+    return spans
 
 
 def _line_count(text: str) -> int:
