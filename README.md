@@ -26,6 +26,13 @@ The third preview shows the `PfKernelPattern` IOCTL handler cleanup, including I
 
 ![PseudoForge preview of PfKernelPattern IOCTL handler cleanup with decoded CTL_CODE comments](screenshots/example3.png)
 
+The fourth preview shows the dockable side-by-side review panel with raw
+Hex-Rays pseudocode on the left, cleaned PseudoForge output on the right,
+compact status/search rows, synchronized search navigation, and highlighted
+matches.
+
+![PseudoForge side-by-side raw and cleaned pseudocode preview with search highlighting](screenshots/example4.png)
+
 ## Decompiler Output Dependency
 
 PseudoForge works on Hex-Rays pseudocode output. Its cleanup quality depends heavily on the quality of the initial decompilation.
@@ -64,7 +71,7 @@ Key documentation:
 
 ## Versioning
 
-Current plugin version: `0.1.0`.
+Current plugin version: `0.1.1`.
 
 The runtime version source is `ida_pseudoforge/version.py`. The `ida-plugin.json` manifest version must match it; the unit suite enforces this parity so plugin packaging and runtime reporting do not drift.
 

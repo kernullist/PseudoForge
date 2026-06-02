@@ -3,7 +3,7 @@
   "plugin": {
     "name": "pseudoforge",
     "entryPoint": "pseudoforge.py",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "idaVersions": ">=7.6",
     "description": "PseudoForge refactors Hex-Rays pseudocode into safer rename plans and readable exported pseudocode.",
     "license": "Private",

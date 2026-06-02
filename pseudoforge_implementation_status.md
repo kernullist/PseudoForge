@@ -1,6 +1,6 @@
 # PseudoForge Implementation Status
 
-Current plugin version: `0.1.0`.
+Current plugin version: `0.1.1`.
 
 ## Current MVP
 
@@ -596,6 +596,9 @@ P2 IDA side-by-side preview update:
   the simple preview with an explicit neutral foreground base so IDA theme
   defaults do not turn unchanged pseudocode into comment green, while
   preserving plain-text fallback.
+- README now includes a side-by-side dockable preview screenshot at
+  `screenshots/example4.png`, showing compact status/search rows, raw and
+  cleaned panes, syntax highlighting, and active search-match highlighting.
 - Dockable preview fallback now reports the concrete unavailable backend reason,
   and Qt binding discovery accepts PyQt5, PyQt6, PySide6, and PySide2 layouts.
 - The existing `simplecustviewer_t` preview remains the default path and the
