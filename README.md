@@ -1566,6 +1566,20 @@ python -B .\tools\pseudoforge_corpus_qa.py `
 
 `qa-context.md` includes the selected functions, EA/name, tags, artifact paths, imports, strings, caller/callee names, interesting lines, and cleaned excerpts. This is the safest payload for external agents such as Codex, Claude Code, Cursor, custom RAG pipelines, or local LLM wrappers because it keeps answers grounded in a small, reviewable evidence set.
 
+A copy-ready skill for other AI agents is available at [`docs/pseudoforge-corpus-agent-skill.md`](docs/pseudoforge-corpus-agent-skill.md). It describes how to use the full batch corpus for evidence-grounded answers without IDA.
+
+Install that file as `%USERPROFILE%\.codex\skills\pseudoforge-corpus-qa\SKILL.md` when using it as a Codex skill, and keep generated corpus artifacts outside the skill folder. Recommended corpus roots are `F:\pseudoforge-corpora\<target-name>\` for long-term analysis or `pseudoforge_out\<target-name>\` inside this repo for ignored local runs. A typical handoff prompt is:
+
+```text
+Use the pseudoforge-corpus-qa skill.
+
+Corpus root:
+F:\pseudoforge-corpora\driver-a
+
+Question:
+Explain this driver's IOCTL dispatch structure and main callback registration flow.
+```
+
 `tools/pseudoforge_ida_batch.py` is the lower-level script that runs inside IDA batch mode. It opens a `.i64` or `.idb`, calls `ida_hexrays.decompile()` per function, analyzes through PseudoForge, appends `.forge` sections, and writes JSONL progress reports. The PowerShell wrapper `tools/run_pseudoforge_ida_batch.ps1` remains available for explicit provider override and legacy compare-directory workflows.
 
 Example:

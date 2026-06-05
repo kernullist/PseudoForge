@@ -264,6 +264,8 @@ Implemented in this folder:
    - corpus index builder merges function bundles, metadata, report summaries, warnings, deterministic rule diagnostics, buffer contracts, tags, imports, strings, and call relationships into a searchable JSON artifact
    - corpus Q&A CLI retrieves relevant functions from the index, emits an evidence context pack without requiring LLM calls, and can use saved/overridden LLM provider settings for evidence-cited answers
    - corpus artifacts are agent-agnostic handoff files: external agents can read the corpus index, metadata, overview, per-function bundles, or focused `qa-context.md` files without IDA or PseudoForge runtime access
+   - `docs/pseudoforge-corpus-agent-skill.md` provides a copy-ready Markdown skill that tells other AI agents how to use the full batch corpus for grounded binary Q&A
+   - the corpus-agent skill documents the recommended split between `%USERPROFILE%\.codex\skills\pseudoforge-corpus-qa\SKILL.md` for the skill and `F:\pseudoforge-corpora\<target-name>\` or repo-local `pseudoforge_out\<target-name>\` for generated artifacts
    - optional `--compare-dir` / `-CompareDir` emits per-function raw Hex-Rays text, PseudoForge cleaned output, full `.forge` section, and raw-vs-cleaned unified diff artifacts
    - batch compare JSONL records include shared-style artifact keys while preserving legacy path fields
    - optional `--llm-renames` / `-LlmRenames` routes batch analysis through the same rename provider/fallback path as interactive IDA Analyze
