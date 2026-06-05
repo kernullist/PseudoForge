@@ -260,6 +260,8 @@ Implemented in this folder:
    - batch mode supports `--llm-renames-auto` for saved plugin config reuse and `--require-configured-llm` for fail-closed LLM-included runs
    - batch mode supports `--export-dir` for full per-function cleaned, raw, diff, rename-map, rule-report, buffer-contract, warning, and summary artifacts
    - external IDA CLI supports `--pdb-path` and `--symbol-path` to set child-process `_NT_SYMBOL_PATH` / `_NT_ALT_SYMBOL_PATH` for PDB-backed batch analysis, while rejecting those options when `--no-pdb` is used
+   - external IDA CLI tails batch JSONL progress in wait mode and prints `Analyzing <index>/<total>: <function> (<ea>)` for the currently running function
+   - external IDA CLI supports Ctrl+C cancellation by writing the configured/default cancel sentinel, waiting for cooperative batch stop, and terminating the IDA process if it remains busy
    - batch mode supports `--corpus-metadata` to export IDA-level segments, imports, exports, strings, names, per-function call edges, import calls, string references, caller/callee names, and function flags for downstream corpus understanding
    - external IDA CLI now writes `pseudoforge-corpus-metadata.json`, builds `pseudoforge-corpus-index.json`, and writes `pseudoforge-corpus-overview.md` by default after a completed run
    - corpus index builder merges function bundles, metadata, report summaries, warnings, deterministic rule diagnostics, buffer contracts, tags, imports, strings, and call relationships into a searchable JSON artifact
@@ -797,6 +799,9 @@ P2 long-running operation cancellation/progress update:
 - `tools/pseudoforge_ida_batch.py --cancel-file` and the wrapper
   `-CancelFile` option stop at the next function boundary when the sentinel file
   exists and record a `stop` event with `reason=cancel_file`.
+- `tools/pseudoforge_ida_cli.py` now consumes those progress records while it
+  waits, prints the current function ordinal/name/EA, and maps Ctrl+C to the
+  configured/default cancel sentinel before forcefully cleaning up IDA if needed.
 
 The current implementation state reflects the `NtSetSystemInformation`,
 `NtSetInformationProcess`, and `NtSetInformationThread` large-dispatcher

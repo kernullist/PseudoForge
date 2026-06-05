@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,8 @@ class IdaCliRun:
     manifest_path: Path
     forge_path: Path
     ida_log_path: Path
+    cancel_file: Path
+    cancel_file_is_default: bool
     corpus_metadata_path: Path
     corpus_index_path: Path
     corpus_overview_path: Path
@@ -46,11 +49,41 @@ class IdaCliRun:
     pdb_alt_symbol_path: str
 
 
+@dataclass
+class _ReportProgressMonitor:
+    path: Path
+    offset: int = 0
+    pending: str = ""
+
+    def poll(self, final: bool = False) -> None:
+        if not self.path.exists():
+            return
+        with self.path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+            handle.seek(self.offset)
+            chunk = handle.read()
+            self.offset = handle.tell()
+        if chunk:
+            text = self.pending + chunk
+            lines = text.splitlines(keepends=True)
+            if lines and not lines[-1].endswith(("\n", "\r")):
+                self.pending = lines.pop()
+            else:
+                self.pending = ""
+            for line in lines:
+                _print_progress_line(line)
+        if final and self.pending:
+            line = self.pending
+            self.pending = ""
+            _print_progress_line(line)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:
         run = _prepare_run(args)
+        if not args.dry_run and run.cancel_file_is_default:
+            _clear_cancel_file(run.cancel_file)
         _print_start(run, args)
         if args.dry_run:
             _write_manifest(
@@ -83,25 +116,21 @@ def main(argv: list[str] | None = None) -> int:
             print("PID: %s" % process.pid)
             return 0
 
-        completed = subprocess.run(
-            run.ida_args,
-            cwd=str(ROOT),
-            **_subprocess_kwargs(run, args),
-        )
+        ida_exit_code, cli_exit_code, interrupted = _run_ida_and_monitor(run, args)
         summary = _write_summary(run)
-        index_result = None if args.no_index else _write_corpus_index(run)
-        status = "complete" if completed.returncode == 0 else "failed"
+        index_result = None if interrupted or args.no_index else _write_corpus_index(run)
+        status = "interrupted" if interrupted else ("complete" if ida_exit_code == 0 else "failed")
         _write_manifest(
             run,
             args,
             status=status,
-            ida_exit_code=completed.returncode,
+            ida_exit_code=ida_exit_code,
             pid=None,
             summary=summary,
             index_result=index_result,
         )
-        _print_finish(run, completed.returncode, summary, args)
-        return int(completed.returncode)
+        _print_finish(run, ida_exit_code, summary, args)
+        return cli_exit_code
     except KeyboardInterrupt:
         print("PseudoForge IDA CLI interrupted.", file=sys.stderr)
         return 130
@@ -128,7 +157,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional profile directory for target-build-specific profile sets.",
     )
     parser.add_argument("--compare-dir", default="", help="Optional legacy raw/cleaned/diff compare directory.")
-    parser.add_argument("--cancel-file", default="", help="Stop before the next function when this file exists.")
+    parser.add_argument(
+        "--cancel-file",
+        default="",
+        help="Override the cancel sentinel used by Ctrl+C and external stop requests.",
+    )
     parser.add_argument("--max-functions", type=int, default=0, help="Maximum functions to process. 0 means all.")
     parser.add_argument("--max-seconds", type=int, default=0, help="Maximum wall time. 0 means unlimited.")
     parser.add_argument("--metadata-max-strings", type=int, default=20000, help="Maximum strings to store in corpus metadata.")
@@ -188,6 +221,8 @@ def _prepare_run(args: argparse.Namespace) -> IdaCliRun:
     manifest_path = output_dir / "pseudoforge-ida-run.json"
     forge_path = output_dir / ("%s.forge" % safe_stem)
     ida_log_path = output_dir / ("%s_%s_ida.log" % (safe_stem, timestamp))
+    cancel_file_is_default = not bool(args.cancel_file)
+    cancel_file = Path(args.cancel_file) if args.cancel_file else output_dir / "pseudoforge-ida-cancel.txt"
     corpus_metadata_path = output_dir / "pseudoforge-corpus-metadata.json"
     corpus_index_path = output_dir / "pseudoforge-corpus-index.json"
     corpus_overview_path = output_dir / "pseudoforge-corpus-overview.md"
@@ -202,6 +237,7 @@ def _prepare_run(args: argparse.Namespace) -> IdaCliRun:
         functions_dir=functions_dir,
         report_path=report_path,
         forge_path=forge_path,
+        cancel_file=cancel_file,
         corpus_metadata_path=corpus_metadata_path,
         compare_dir=compare_dir,
     )
@@ -216,6 +252,8 @@ def _prepare_run(args: argparse.Namespace) -> IdaCliRun:
         manifest_path=manifest_path,
         forge_path=forge_path,
         ida_log_path=ida_log_path,
+        cancel_file=cancel_file,
+        cancel_file_is_default=cancel_file_is_default,
         corpus_metadata_path=corpus_metadata_path,
         corpus_index_path=corpus_index_path,
         corpus_overview_path=corpus_overview_path,
@@ -236,6 +274,7 @@ def _build_batch_args(
     functions_dir: Path,
     report_path: Path,
     forge_path: Path,
+    cancel_file: Path,
     corpus_metadata_path: Path,
     compare_dir: Path | None,
 ) -> list[str]:
@@ -259,7 +298,7 @@ def _build_batch_args(
     if compare_dir is not None:
         result.extend(["--compare-dir", str(compare_dir)])
     _append_option(result, "--profile-dir", args.profile_dir)
-    _append_option(result, "--cancel-file", args.cancel_file)
+    result.extend(["--cancel-file", str(cancel_file)])
     _append_int_option(result, "--max-functions", args.max_functions)
     _append_int_option(result, "--max-seconds", args.max_seconds)
     _append_int_option(result, "--metadata-max-strings", args.metadata_max_strings)
@@ -285,6 +324,128 @@ def _subprocess_kwargs(run: IdaCliRun, args: argparse.Namespace) -> dict[str, An
     if run.ida_env is not None:
         kwargs["env"] = run.ida_env
     return kwargs
+
+
+def _run_ida_and_monitor(run: IdaCliRun, args: argparse.Namespace) -> tuple[int | None, int, bool]:
+    process = subprocess.Popen(
+        run.ida_args,
+        cwd=str(ROOT),
+        **_subprocess_kwargs(run, args),
+    )
+    monitor = _ReportProgressMonitor(run.report_path)
+    try:
+        ida_exit_code = _wait_for_process_exit(process, monitor, timeout_seconds=None)
+        return ida_exit_code, int(ida_exit_code if ida_exit_code is not None else 1), False
+    except KeyboardInterrupt:
+        print("Ctrl+C received; requesting IDA batch cancellation.", file=sys.stderr)
+        ida_exit_code = _request_process_stop(process, run.cancel_file, monitor)
+        return ida_exit_code, 130, True
+
+
+def _wait_for_process_exit(
+    process: subprocess.Popen[Any],
+    monitor: _ReportProgressMonitor,
+    timeout_seconds: float | None,
+) -> int | None:
+    deadline = None if timeout_seconds is None else time.monotonic() + max(0.0, timeout_seconds)
+    while True:
+        exit_code = process.poll()
+        monitor.poll(final=exit_code is not None)
+        if exit_code is not None:
+            return int(exit_code)
+        if deadline is not None and time.monotonic() >= deadline:
+            return None
+        time.sleep(0.25)
+
+
+def _request_process_stop(
+    process: subprocess.Popen[Any],
+    cancel_file: Path,
+    monitor: _ReportProgressMonitor,
+    cancel_timeout_seconds: float = 5.0,
+    terminate_timeout_seconds: float = 5.0,
+) -> int | None:
+    cancel_requested = False
+    try:
+        _write_cancel_file(cancel_file)
+        cancel_requested = True
+        print("Cancel file: %s" % cancel_file, file=sys.stderr)
+    except OSError as exc:
+        print("Cancel file write failed: %s" % exc, file=sys.stderr)
+
+    if cancel_requested:
+        try:
+            exit_code = _wait_for_process_exit(process, monitor, timeout_seconds=cancel_timeout_seconds)
+            if exit_code is not None:
+                return exit_code
+        except KeyboardInterrupt:
+            print("Second Ctrl+C received; terminating IDA process.", file=sys.stderr)
+
+    print("IDA is still running; terminating process.", file=sys.stderr)
+    try:
+        process.terminate()
+    except OSError as exc:
+        print("IDA terminate failed: %s" % exc, file=sys.stderr)
+    try:
+        exit_code = _wait_for_process_exit(process, monitor, timeout_seconds=terminate_timeout_seconds)
+        if exit_code is not None:
+            return exit_code
+    except KeyboardInterrupt:
+        print("Additional Ctrl+C received; killing IDA process.", file=sys.stderr)
+
+    print("IDA did not terminate; killing process.", file=sys.stderr)
+    try:
+        process.kill()
+    except OSError as exc:
+        print("IDA kill failed: %s" % exc, file=sys.stderr)
+    try:
+        return _wait_for_process_exit(process, monitor, timeout_seconds=terminate_timeout_seconds)
+    except KeyboardInterrupt:
+        return None
+
+
+def _clear_cancel_file(cancel_file: Path) -> None:
+    try:
+        cancel_file.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _write_cancel_file(cancel_file: Path) -> None:
+    cancel_file.parent.mkdir(parents=True, exist_ok=True)
+    cancel_file.write_text("cancel requested\n", encoding="utf-8")
+
+
+def _print_progress_line(line: str) -> None:
+    text = line.strip()
+    if not text:
+        return
+    try:
+        record = json.loads(text)
+    except json.JSONDecodeError:
+        return
+    if record.get("event") != "progress" or record.get("phase") != "function_start":
+        return
+    index = _safe_int(record.get("index"))
+    total = _safe_int(record.get("selected_functions"))
+    name = str(record.get("name") or "<unnamed>")
+    ea = str(record.get("ea") or "")
+    if index > 0 and total > 0:
+        prefix = "Analyzing %d/%d: %s" % (index, total, name)
+    elif index > 0:
+        prefix = "Analyzing %d: %s" % (index, name)
+    else:
+        prefix = "Analyzing: %s" % name
+    if ea:
+        prefix = "%s (%s)" % (prefix, ea)
+    print(prefix, flush=True)
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _build_ida_args(
@@ -422,6 +583,7 @@ def _write_manifest(
         "summary_path": str(run.summary_path),
         "manifest_path": str(run.manifest_path),
         "ida_log_path": str(run.ida_log_path),
+        "cancel_file": str(run.cancel_file),
         "corpus_metadata_path": str(run.corpus_metadata_path),
         "corpus_index_path": str(run.corpus_index_path),
         "corpus_overview_path": str(run.corpus_overview_path),
@@ -461,6 +623,7 @@ def _print_start(run: IdaCliRun, args: argparse.Namespace) -> None:
     print("Corpus index: %s" % run.corpus_index_path)
     print("Report: %s" % run.report_path)
     print("IDA log: %s" % run.ida_log_path)
+    print("Cancel file: %s" % run.cancel_file)
     if args.no_pdb:
         print("PDB: disabled (-Opdb:off)")
     elif run.pdb_symbol_path:
@@ -468,15 +631,17 @@ def _print_start(run: IdaCliRun, args: argparse.Namespace) -> None:
     else:
         print("PDB: IDA defaults")
     print("LLM: plugin settings%s" % ("" if not args.allow_no_llm else " (optional)"))
+    if not args.no_wait and not args.dry_run:
+        print("Press Ctrl+C to request cancellation.")
 
 
 def _print_finish(
     run: IdaCliRun,
-    exit_code: int,
+    exit_code: int | None,
     summary: dict[str, Any] | None,
     args: argparse.Namespace,
 ) -> None:
-    print("IDA exit: %s" % exit_code)
+    print("IDA exit: %s" % ("unknown" if exit_code is None else exit_code))
     if summary is not None:
         print("Summary: %s" % run.summary_path)
         if not args.no_summary:

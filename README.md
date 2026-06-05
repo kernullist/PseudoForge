@@ -1489,6 +1489,14 @@ python -B .\tools\pseudoforge_ida_cli.py `
 
 `--no-pdb` remains available for no-symbol validation runs and cannot be combined with `--pdb-path` or `--symbol-path`.
 
+In normal wait mode, the external CLI tails the IDA JSONL report and prints live function progress:
+
+```text
+Analyzing 3/51: DriverEntry (0x140001000)
+```
+
+Press `Ctrl+C` to request cancellation. The CLI writes `<output-dir>\pseudoforge-ida-cancel.txt` by default, or the path supplied through `--cancel-file`, waits briefly for the IDA batch script to stop at the next function boundary, and then terminates the IDA process if it remains busy. Partial JSONL, summary, manifest, `.forge`, and per-function artifacts remain available for inspection; the post-run corpus index is skipped for interrupted runs.
+
 Default output layout:
 
 ```text
@@ -1513,6 +1521,7 @@ Default output layout:
 <output-dir>\pseudoforge-corpus-index.json
 <output-dir>\pseudoforge-corpus-overview.md
 <output-dir>\<idb-stem>_<timestamp>_ida.log
+<output-dir>\pseudoforge-ida-cancel.txt   # created only when Ctrl+C cancellation is requested
 ```
 
 Useful external CLI options:
@@ -1520,7 +1529,7 @@ Useful external CLI options:
 - `--name-regex REGEX`: filter functions by name.
 - `--max-functions N`: limit the run for smoke testing.
 - `--resume`: skip EAs already present in the aggregate `.forge`.
-- `--cancel-file PATH`: stop before the next function when the sentinel file exists.
+- `--cancel-file PATH`: override the default cancel sentinel used by Ctrl+C and external stop requests.
 - `--profile-dir PATH`: use target-build-specific profile sets.
 - `--no-pdb`: pass `-Opdb:off` to IDA.
 - `--pdb-path PATH`: add a local PDB file or symbol directory to the child IDA symbol path. Can be repeated.
