@@ -1,0 +1,384 @@
+{
+  "schema": "kernel_corpus_canonical_expectations_v1",
+  "description": "Quality expectations for generated Kernel Corpus canonical answer artifacts.",
+  "defaults": {
+    "max_validation_warnings": 0,
+    "min_source_refs": 1,
+    "pass_score": 80,
+    "degraded_score": 60,
+    "max_name_length": 140,
+    "forbidden_name_regexes": [],
+    "suspicious_name_regexes": [
+      "^\\?\\?\\$",
+      "_tlg",
+      "wil_details_",
+      "^MI_WSLE_LOG_ACCESS$"
+    ],
+    "suspicious_tags": []
+  },
+  "topics": {
+    "process_object_lifecycle": {
+      "priority": "P0",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^(Nt|Zw)Create(User)?Process(Ex)?$", "^PspAllocateProcess$", "^PspInsertProcess$", "^PspExitProcess$", "^Psp(ProcessDelete|Rundown(Process|SingleProcess))$"],
+      "bonus_name_regexes": ["^PspCallProcessNotifyRoutines$", "^PsLookupProcessByProcessId$", "^ObInsertObject(Ex)?$"],
+      "preferred_tags": ["process_thread", "object_manager", "callback"],
+      "min_selected_functions": 24,
+      "min_edge_count": 20,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "thread_object_lifecycle": {
+      "priority": "P0",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^(Nt|Zw)CreateThread(Ex)?$", "^Psp(Create|Allocate|Insert).*Thread", "^PspExitThread$", "^Psp.*Thread.*(Delete|Rundown|Terminate)"],
+      "bonus_name_regexes": ["^PsSetCreateThreadNotifyRoutine", "^PspCallThreadNotifyRoutines"],
+      "preferred_tags": ["process_thread", "callback"],
+      "min_selected_functions": 24,
+      "min_edge_count": 15,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "object_manager_lifecycle": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Ob(CreateObject|InsertObject(Ex)?|ReferenceObjectBy(Handle|Pointer)|OpenObjectByPointer|fDereferenceObject)$"],
+      "bonus_name_regexes": ["^Obp(CreateHandle|CloseHandle|LookupObjectName)"],
+      "preferred_tags": ["object_manager"],
+      "min_selected_functions": 20,
+      "min_edge_count": 5
+    },
+    "handle_open_reference_close": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^NtOpen(Process|Thread)$", "^ObReferenceObjectBy(Handle|Pointer)", "^Ob(fDereferenceObject|pCloseHandle|CloseHandle)"],
+      "bonus_name_regexes": ["^ZwOpen(Process|Thread)$", "^ObOpenObjectByPointer$"],
+      "preferred_tags": ["object_manager", "security", "process_thread"],
+      "min_selected_functions": 18,
+      "min_edge_count": 5
+    },
+    "object_namespace_lookup": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Ob(OpenObjectByName|ReferenceObjectByName|pLookupObjectName)", "^Ob(CreateObject|InsertObject)"],
+      "bonus_name_regexes": ["SymbolicLink", "ObjectAttributes"],
+      "preferred_tags": ["object_manager"],
+      "min_selected_functions": 16,
+      "min_edge_count": 4
+    },
+    "security_access_check": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^SeAccessCheck", "^SepAccessCheck$", "^Se(Capture|Lock|Release)SubjectContext$", "^Se(Single)?PrivilegeCheck$"],
+      "bonus_name_regexes": ["^SeTokenType$", "^SePrivilegePolicyCheck$"],
+      "preferred_tags": ["security", "object_manager"],
+      "suspicious_name_regexes": ["^Mi", "^Etwp", "^Wdip", "^wil_details_", "^MI_WSLE_LOG_ACCESS$"],
+      "min_selected_functions": 20,
+      "min_edge_count": 5
+    },
+    "syscall_dispatch_path": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Ki(ServiceInternal|SystemService|SystemCall)", "^Nt(Create|DeviceIoControl)"],
+      "bonus_name_regexes": ["^Zw", "ServiceTable"],
+      "preferred_tags": ["dispatch"],
+      "min_selected_functions": 18,
+      "min_edge_count": 4
+    },
+    "previous_mode_probe": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^(ProbeFor(Read|Write)|ExGetPreviousMode|KeGetPreviousMode|MmUserProbeAddress)$"],
+      "bonus_name_regexes": ["PreviousMode", "Probe"],
+      "preferred_tags": ["security", "memory"],
+      "min_selected_functions": 18,
+      "min_edge_count": 4
+    },
+    "image_section_load": {
+      "priority": "P0",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^(MmLoadSystemImage|Mi.*Image|PsSetLoadImageNotifyRoutine)", "^(Nt|Zw)(Create|Open)Section"],
+      "bonus_name_regexes": ["^PspLoadImageNotifyRoutine", "ImageNotify"],
+      "preferred_tags": ["memory", "process_thread", "callback"],
+      "min_selected_functions": 24,
+      "min_edge_count": 15,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "driver_load_unload": {
+      "priority": "P0",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^(IopLoadDriver|MmLoadSystemImage|IoCreateDriver|IopCreateDriver)", "^(IopDeleteDriver|MmUnloadSystemImage|NtUnloadDriver|ZwUnloadDriver)"],
+      "bonus_name_regexes": ["DriverEntry", "DriverUnload", "MajorFunction"],
+      "preferred_tags": ["io_manager", "dispatch"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "steady_state", "exit", "rundown", "delete"]
+    },
+    "process_thread_image_callbacks": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^PsSetCreateProcessNotifyRoutine", "^PsSetCreateThreadNotifyRoutine", "^PsSetLoadImageNotifyRoutine"],
+      "bonus_name_regexes": ["^PspCall(Process|Thread)NotifyRoutines", "^PspLoadImageNotifyRoutine"],
+      "preferred_tags": ["callback", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 5
+    },
+    "ob_callbacks": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^ObRegisterCallbacks$", "^ObUnRegisterCallbacks$", "^ObpCall(Pre|Post)OperationCallbacks"],
+      "bonus_name_regexes": ["^ObGetFilterVersion$", "^Obp(Create|Close)Handle"],
+      "preferred_tags": ["object_manager", "callback"],
+      "min_selected_functions": 16,
+      "min_edge_count": 4
+    },
+    "registry_callbacks": {
+      "priority": "P0",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^CmRegisterCallbackEx$", "^CmUnRegisterCallback$", "^Cmp(Call|Callback|Do).*"],
+      "bonus_name_regexes": ["^Nt(Create|Open|Set|Delete).*Key", "^CmCallbackGetKeyObjectID"],
+      "preferred_tags": ["registry", "callback"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "initialize", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "io_request_lifecycle": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Io(f)?CallDriver$", "^Io(f)?CompleteRequest$", "^Io(Allocate|Free|Cancel)Irp$"],
+      "bonus_name_regexes": ["IrpStackLocation", "CompletionRoutine"],
+      "preferred_tags": ["io_manager", "dispatch"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "ioctl_buffer_contracts": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^(Nt|Zw)DeviceIoControlFile$", "^IoBuildDeviceIoControlRequest$", "DeviceIoControl"],
+      "bonus_name_regexes": ["SystemBuffer", "InputBufferLength", "OutputBufferLength", "IopXxxControlFile"],
+      "preferred_tags": ["io_manager", "dispatch"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "device_driver_stack": {
+      "priority": "P0",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^Io(Create|Delete|Attach|Detach)Device", "^IoCreateDriver$"],
+      "bonus_name_regexes": ["DeviceObject", "DriverObject", "AddDevice"],
+      "preferred_tags": ["io_manager", "dispatch"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "steady_state", "exit", "rundown", "delete"]
+    },
+    "pnp_power_irp_flow": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^(PoCallDriver|PoRequestPowerIrp|PopRequestPowerIrp|IopSynchronousCall)$"],
+      "bonus_name_regexes": ["Pnp", "Power", "RemoveDevice", "Surprise"],
+      "preferred_tags": ["io_manager", "dispatch"],
+      "min_selected_functions": 18,
+      "min_edge_count": 4
+    },
+    "pool_allocation_lifecycle": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^ExAllocatePool(2|3|WithTag|WithQuotaTag)", "^ExFreePool(WithTag)?$"],
+      "bonus_name_regexes": ["PoolTag", "ExpAllocatePool"],
+      "preferred_tags": ["memory"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "mdl_pin_map_lifecycle": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Io(Allocate|Free)Mdl$", "^Mm(ProbeAndLockPages|UnlockPages|MapLockedPagesSpecifyCache|UnmapLockedPages|GetSystemAddressForMdlSafe)$"],
+      "bonus_name_regexes": ["Mdl", "LockedPages"],
+      "preferred_tags": ["memory"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "virtual_memory_lifecycle": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^(Nt|Zw)(Allocate|Free|Protect|Query)VirtualMemory$", "^Mi(Allocate|Protect|Delete).*Virtual"],
+      "bonus_name_regexes": ["Vad", "AddressSpace"],
+      "preferred_tags": ["memory", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "rundown_reference_patterns": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Ex(Acquire|Release|WaitFor|Initialize).*Rundown", "^PspRundown(Process|SingleProcess)$"],
+      "bonus_name_regexes": ["RundownCompleted", "RundownProtection"],
+      "preferred_tags": ["process_thread", "object_manager"],
+      "min_selected_functions": 18,
+      "min_edge_count": 5
+    },
+    "sync_irql_locking_rules": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Ke(Acquire|Release).*SpinLock", "^KeWaitForSingleObject$", "^Ex(Acquire|Release)Resource.*Lite$"],
+      "bonus_name_regexes": ["CriticalRegion", "IRQL"],
+      "preferred_tags": ["synchronization", "dispatch"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "apc_dpc_workitem_timer": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^Ke(Initialize|InsertQueue|RemoveQueue)Dpc", "^Ke(Initialize|InsertQueue)Apc", "^(Io|Ex)QueueWorkItem", "^Ke(Set|Cancel)Timer"],
+      "bonus_name_regexes": ["WorkItem", "Timer", "Dpc", "Apc"],
+      "preferred_tags": ["dispatch", "callback"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "exception_bugcheck_path": {
+      "priority": "P0",
+      "mode": "focused",
+      "required_name_regexes": ["^KeBugCheck(Ex)?$", "^Ki(DispatchException|BugCheck)", "^(Ex|Rtl)RaiseStatus$"],
+      "bonus_name_regexes": ["Exception", "BugCheck"],
+      "preferred_tags": ["dispatch", "security"],
+      "min_selected_functions": 16,
+      "min_edge_count": 5
+    },
+    "process_identity_sources": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^Ps(Get(ProcessId|CurrentProcessId|ProcessImageFileName)|LookupProcessByProcessId)$", "^SeLocateProcessImageName$", "^PsReferenceProcessFilePointer$"],
+      "bonus_name_regexes": ["IoGetInitiatorProcess", "ImageFileName"],
+      "preferred_tags": ["process_thread", "security", "file"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "token_impersonation_flow": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^PsReference(Primary|Impersonation)Token", "^Ps(ImpersonateClient|RevertToSelf)$", "^Se(CaptureSubjectContext|PrivilegeCheck|TokenType)$"],
+      "bonus_name_regexes": ["NtImpersonate", "SubjectContext"],
+      "preferred_tags": ["security", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "section_file_process_linkage": {
+      "priority": "P1",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^(Nt|Zw)(Create|Open)Section$", "^Mm(Create|Map|Unmap).*Section", "^Mi.*Section"],
+      "bonus_name_regexes": ["FileObject", "ImageSection", "ControlArea"],
+      "preferred_tags": ["memory", "file", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "steady_state", "exit", "rundown", "delete"]
+    },
+    "remote_process_access_flow": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^(Nt|Zw)OpenProcess$", "^PsLookupProcessByProcessId$", "^ObReferenceObjectByHandle", "^(Nt(Read|Write)VirtualMemory|MmCopyVirtualMemory)$"],
+      "bonus_name_regexes": ["NtQueryInformationProcess", "NtSetInformationProcess"],
+      "preferred_tags": ["process_thread", "memory", "security"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "memory_copy_user_kernel": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^MmCopyVirtualMemory$", "^MmCopyMemory$", "^RtlCopyMemory$", "^ProbeFor(Read|Write)$"],
+      "bonus_name_regexes": ["Nt(Read|Write)VirtualMemory", "UserBuffer"],
+      "preferred_tags": ["memory", "security", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "module_load_visibility": {
+      "priority": "P1",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^PsSetLoadImageNotifyRoutine", "^PspLoadImageNotifyRoutine", "^MmLoadSystemImage$"],
+      "bonus_name_regexes": ["ImageNotify", "LoadImage"],
+      "preferred_tags": ["memory", "callback", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "callback_registration_inventory": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^PsSet(CreateProcess|CreateThread|LoadImage)NotifyRoutine", "^ObRegisterCallbacks$", "^CmRegisterCallbackEx$"],
+      "bonus_name_regexes": ["IoRegister(Shutdown|PlugPlay)Notification", "UnRegister", "NotifyRoutine"],
+      "preferred_tags": ["callback", "object_manager", "process_thread"],
+      "min_selected_functions": 28,
+      "min_edge_count": 8
+    },
+    "notification_callback_constraints": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^PspCall(Process|Thread)NotifyRoutines", "^PspLoadImageNotifyRoutine", "^(Ex|Io)QueueWorkItem"],
+      "bonus_name_regexes": ["ObRegisterCallbacks", "CmRegisterCallbackEx", "Worker"],
+      "preferred_tags": ["callback", "dispatch", "process_thread"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "driver_object_dispatch_table": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^Iop(Load|Delete|Create|Initialize).*Driver", "^IoCreateDriver$", "DriverEntry"],
+      "bonus_name_regexes": ["MajorFunction", "DriverUnload", "AddDevice"],
+      "preferred_tags": ["io_manager", "dispatch"],
+      "min_selected_functions": 20,
+      "min_edge_count": 5
+    },
+    "file_object_lifecycle": {
+      "priority": "P1",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^(Nt|Zw)(Create|Open)File$", "^Iop.*File(Object)?", "^ObReferenceObjectByHandle"],
+      "bonus_name_regexes": ["Cleanup", "Close", "DeleteFile"],
+      "preferred_tags": ["file", "io_manager", "object_manager"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "allocate", "initialize", "publish", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "registry_operation_lifecycle": {
+      "priority": "P1",
+      "mode": "lifecycle",
+      "required_name_regexes": ["^Nt(Create|Open|Set|Delete|Enumerate).*Key", "^CmRegisterCallbackEx$", "^Cmp.*Key"],
+      "bonus_name_regexes": ["Callback", "Hive", "ValueKey"],
+      "preferred_tags": ["registry", "callback"],
+      "min_selected_functions": 24,
+      "min_edge_count": 12,
+      "required_lifecycle_phases": ["entry", "initialize", "notify", "steady_state", "exit", "rundown", "delete"]
+    },
+    "kernel_telemetry_etw_wpp": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^Etw(Register|Unregister|Write|EventWrite)", "^WmiTraceMessage", "^IoWMIRegistrationControl$"],
+      "bonus_name_regexes": ["Trace", "Event", "WPP"],
+      "preferred_tags": ["callback", "dispatch"],
+      "suspicious_name_regexes": ["^\\?\\?\\$"],
+      "min_selected_functions": 20,
+      "min_edge_count": 5
+    },
+    "verifier_failure_classes": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^(VerifierBugCheckIfAppropriate|VfFailDriver)$", "^Vf(Deadlock|Irql|CheckForResource)"],
+      "bonus_name_regexes": ["Verifier", "Deadlock", "Irql"],
+      "preferred_tags": ["memory", "dispatch", "security"],
+      "min_selected_functions": 20,
+      "min_edge_count": 5
+    },
+    "low_resource_failure_paths": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^ExAllocatePool(2|3)", "^IoAllocate(Irp|Mdl)$", "^MmAllocatePagesForMdlEx$", "STATUS_INSUFFICIENT_RESOURCES"],
+      "bonus_name_regexes": ["Insufficient", "LowResource", "Failure"],
+      "preferred_tags": ["memory", "io_manager"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    },
+    "lock_hierarchy_deadlock_risks": {
+      "priority": "P1",
+      "mode": "focused",
+      "required_name_regexes": ["^Ke(Acquire|Release).*SpinLock", "^Ex(Acquire|Release)Resource.*Lite$", "^VfDeadlockAcquireResource$"],
+      "bonus_name_regexes": ["Rundown", "CriticalRegion", "Deadlock"],
+      "preferred_tags": ["synchronization", "dispatch", "memory"],
+      "min_selected_functions": 24,
+      "min_edge_count": 8
+    }
+  }
+}

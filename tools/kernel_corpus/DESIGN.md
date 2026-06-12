@@ -27,6 +27,10 @@ tools/
     answer_harness.py
     atlas.py
     builder.py
+    canonical_answers.py
+    canonical_audit.py
+    canonical_expectations.json
+    canonical_topics.json
     ea.py
     errors.py
     install_wiring.py
@@ -136,7 +140,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The implementation is complete through Phase 16:
+The implementation is complete through Phase 17:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -175,6 +179,10 @@ The implementation is complete through Phase 16:
     emits reviewable answer bundles with evidence packs, traces, prompts,
     answer drafts, source maps, candidate reviews, gaps, and validation
     reports under the ignored pack output tree.
+17. Canonical answer quality audit checks generated P0/P1 answer bundles
+    against reviewable golden expectations, writes ignored quality reports,
+    and feeds deterministic candidate-quality metadata back into generated
+    artifacts.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -548,6 +556,42 @@ Default output:
 
 Generated canonical answer bundles are research artifacts. Keep them under the
 ignored pack root or another external corpus workspace.
+
+`tools/kernel_corpus/canonical_expectations.json` is the reviewable golden
+expectation layer for the current P0/P1 catalog. It defines required, bonus,
+forbidden, and suspicious function-name regexes; preferred and suspicious tags;
+minimum selected-function counts; minimum edge counts; required lifecycle
+phases; validation-warning ceilings; and source-reference coverage.
+
+`tools/kernel_corpus/canonical_audit.py` is deterministic candidate-quality
+lint for generated canonical answer bundles. It reads each topic's
+`manifest.json`, `evidence-pack.json`, `trace.json`, `validation.json`,
+`candidate-review.md`, `source-map.md`, and `gaps.md`, then emits status,
+score, missing required functions, suspicious candidates, forbidden candidates,
+missing phases, weak edge coverage, validation warnings, gap counts, source
+identity warnings, and recommended tuning actions.
+
+Example:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_audit.py `
+  --canonical-root "<pack-root>\canonical-answers" `
+  --format text `
+  --report-out "<pack-root>\canonical-answers\quality-report.json"
+```
+
+Generated quality reports live under the ignored canonical answer root:
+
+```text
+<canonical-root>\quality-report.json
+<canonical-root>\quality-report.md
+<topic-dir>\quality.json
+<topic-dir>\quality.md
+```
+
+Answer validation is citation lint. Canonical audit is candidate-quality lint.
+Neither replaces expert review of `candidate-review.md`, `gaps.md`, and the
+underlying corpus artifacts.
 
 ## Pack Freshness Validator
 
@@ -1125,6 +1169,33 @@ Acceptance:
   per-topic `manifest.json`.
 - Validate generated answer drafts with zero evidence-chain warnings.
 
+### Phase 17: Canonical answer quality audit
+
+Deliver:
+
+```text
+tools/kernel_corpus/canonical_expectations.json
+tools/kernel_corpus/canonical_audit.py
+tools/kernel_corpus/canonical_answers.py
+tests/test_kernel_corpus_canonical_audit.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+```
+
+Acceptance:
+
+- Cover every current P0/P1 canonical answer topic with reviewable quality
+  expectations.
+- Audit generated answer bundles without model calls or external web access.
+- Report pass, degraded, or fail status with stable scores and stable topic
+  ordering.
+- Detect missing required functions, forbidden or suspicious candidates,
+  missing lifecycle phases, weak edge coverage, validation warnings, source
+  reference gaps, source identity drift, and generated-artifact gaps.
+- Write ignored root-level and per-topic quality reports under
+  `<pack-root>\canonical-answers`.
+- Keep normal tests fixture-based and independent of the full ntoskrnl pack.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -1146,7 +1217,8 @@ Test layers:
 10. Performance profiler tests for fixture build and retrieval coverage.
 11. Vector recall experiment tests with a fake embedding backend.
 12. Canonical answer manifest and fixture-generation tests.
-13. Optional integration smoke against the real ntoskrnl pack when present.
+13. Canonical audit expectation, report, and scoring-regression tests.
+14. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -1173,6 +1245,9 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Treat answer harness validation as citation lint, not final factual proof.
 - Treat canonical answer drafts as validated baselines, not polished final
   reverse-engineering conclusions; review candidate lists before reuse.
+- Treat canonical quality audit as candidate-quality lint, not expert review.
+  Use `quality.md` to decide which retrieval expectations, seeds, tags, or
+  ontology phases need tuning.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 

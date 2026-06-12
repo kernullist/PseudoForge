@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 from tools.kernel_corpus.answer_harness import build_prompt, validate_answer
 from tools.kernel_corpus.errors import KernelCorpusError, QueryError
 from tools.kernel_corpus.lifecycle import trace_lifecycle
-from tools.kernel_corpus.query import build_evidence_pack, corpus_status, find_functions_by_name, search_functions
+from tools.kernel_corpus.query import build_evidence_pack, corpus_status, find_functions_by_name, get_neighbors, search_functions
 
 TOPICS_SCHEMA_VERSION = "kernel_corpus_canonical_topics_v1"
 RUN_SCHEMA_VERSION = "kernel_corpus_canonical_answer_run_v1"
@@ -45,6 +45,8 @@ class Candidate:
     name: str
     score: int
     reasons: set[str]
+    tags: set[str]
+    discovery_kinds: set[str]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -138,6 +140,7 @@ def build_canonical_answers(
     }
     (root / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=True, sort_keys=True), encoding="utf-8")
     (root / "README.md").write_text(_render_index_readme(index), encoding="utf-8")
+    _write_quality_report_if_expected(root, [str(item["id"]) for item in built])
     return index
 
 
@@ -340,6 +343,7 @@ def _build_focused_pack(topic: CanonicalTopic, pack_root: str | Path) -> tuple[d
     candidates: dict[str, Candidate] = {}
     discovery_events = []
     gaps = []
+    exact_seed_eas: dict[str, str] = {}
 
     for name in _strings(topic.raw.get("seed_names")) + _strings(topic.raw.get("extra_seed_names")):
         exact = find_functions_by_name(pack_root, name, limit=DEFAULT_QUERY_LIMIT)
@@ -347,10 +351,15 @@ def _build_focused_pack(topic: CanonicalTopic, pack_root: str | Path) -> tuple[d
             for function in exact:
                 _add_candidate(candidates, function, 100, "exact seed name: %s" % name)
                 discovery_events.append(_event("exact_name", name, function))
+                ea = str(function.get("ea", "") or "")
+                if ea:
+                    exact_seed_eas[ea] = name
         else:
             gaps.append("Seed name did not resolve exactly: %s" % name)
         for function in search_functions(pack_root, query=name, limit=8, include_excerpt=True):
             _add_candidate(candidates, function, 50, "seed name search: %s" % name)
+
+    _discover_exact_seed_neighbors(pack_root, candidates, exact_seed_eas, discovery_events)
 
     for query in _strings(topic.raw.get("queries")):
         results = search_functions(pack_root, query=query, limit=DEFAULT_QUERY_LIMIT, include_excerpt=True)
@@ -368,11 +377,13 @@ def _build_focused_pack(topic: CanonicalTopic, pack_root: str | Path) -> tuple[d
             _add_candidate(candidates, function, 12, "tag: %s" % tag)
             discovery_events.append(_event("tag", tag, function))
 
+    _adjust_focused_candidate_scores(candidates, topic)
     selected = sorted(candidates.values(), key=lambda item: (-item.score, item.name.lower(), int(item.ea, 0)))[:max_functions]
     if not selected:
         fallback = search_functions(pack_root, query=topic.title, limit=max_functions, include_excerpt=True)
         for function in fallback:
             _add_candidate(candidates, function, 5, "fallback title query")
+        _adjust_focused_candidate_scores(candidates, topic)
         selected = sorted(candidates.values(), key=lambda item: (-item.score, item.name.lower(), int(item.ea, 0)))[:max_functions]
         if not selected:
             gaps.append("No selected functions were found for this canonical topic.")
@@ -415,6 +426,8 @@ def _build_focused_pack(topic: CanonicalTopic, pack_root: str | Path) -> tuple[d
                 "ea": item.ea,
                 "name": item.name,
                 "score": item.score,
+                "tags": sorted(item.tags),
+                "discovery_kinds": sorted(item.discovery_kinds),
                 "reasons": sorted(item.reasons),
             }
             for item in selected
@@ -423,6 +436,102 @@ def _build_focused_pack(topic: CanonicalTopic, pack_root: str | Path) -> tuple[d
         "gaps": pack["gaps"],
     }
     return pack, trace
+
+
+def _write_quality_report_if_expected(root: Path, topic_ids: list[str]) -> None:
+    try:
+        from tools.kernel_corpus.canonical_audit import (
+            DEFAULT_EXPECTATIONS_PATH,
+            audit_canonical_root,
+            expectations_cover_topics,
+            load_expectations,
+        )
+    except (ImportError, OSError):
+        return
+    try:
+        expectations = load_expectations(DEFAULT_EXPECTATIONS_PATH)
+    except (OSError, KernelCorpusError, ValueError, json.JSONDecodeError, re.error):
+        return
+    if not expectations_cover_topics(expectations, topic_ids):
+        return
+    audit_canonical_root(
+        root,
+        expectations_path=DEFAULT_EXPECTATIONS_PATH,
+        topic_ids=topic_ids,
+        report_out=root / "quality-report.json",
+        write_topic_reports=True,
+    )
+
+
+def _discover_exact_seed_neighbors(
+    pack_root: str | Path,
+    candidates: dict[str, Candidate],
+    exact_seed_eas: dict[str, str],
+    discovery_events: list[dict[str, str]],
+) -> None:
+    for ea, seed_name in sorted(exact_seed_eas.items(), key=lambda item: int(item[0], 0)):
+        try:
+            neighbors = get_neighbors(pack_root, ea, direction="both", depth=1, limit=32)
+        except QueryError:
+            continue
+        for node in neighbors.get("nodes", []) if isinstance(neighbors.get("nodes"), list) else []:
+            if not isinstance(node, dict):
+                continue
+            node_ea = str(node.get("ea", "") or "")
+            if not node_ea or node_ea == ea:
+                continue
+            _add_candidate(candidates, node, 18, "local graph neighbor of exact seed: %s" % seed_name)
+            discovery_events.append(_event("seed_neighbor", seed_name, node))
+
+
+def _adjust_focused_candidate_scores(candidates: dict[str, Candidate], topic: CanonicalTopic) -> None:
+    if not candidates:
+        return
+    topic_tokens = _topic_tokens(topic)
+    seed_name_values = _strings(topic.raw.get("seed_names")) + _strings(topic.raw.get("extra_seed_names"))
+    seed_names = {item.lower() for item in seed_name_values}
+    seed_prefixes = _seed_prefixes(seed_name_values)
+    topic_tags = set(_strings(topic.raw.get("tags")))
+    telemetry_allowed = bool(topic_tokens.intersection({"etw", "wpp", "wmi", "trace", "tracing", "telemetry", "event"}))
+    template_allowed = bool(topic_tokens.intersection({"template", "c++", "cpp"}))
+    for candidate in candidates.values():
+        name = candidate.name
+        name_lower = name.lower()
+        name_tokens = _split_tokens(name)
+        if name_lower in seed_names:
+            candidate.score += 25
+            candidate.reasons.add("score exact seed-name boost")
+            candidate.discovery_kinds.add("exact_seed_score")
+        elif any(seed and seed in name_lower for seed in seed_names):
+            candidate.score += 8
+            candidate.reasons.add("score seed-name substring boost")
+        token_hits = sorted(topic_tokens.intersection(name_tokens))
+        if token_hits:
+            boost = min(14, 5 + (len(token_hits) * 3))
+            candidate.score += boost
+            candidate.reasons.add("score topic token match: %s" % ", ".join(token_hits[:5]))
+        if topic_tags.intersection(candidate.tags):
+            candidate.score += 8
+            candidate.reasons.add("score preferred topic tag match")
+        prefix = _kernel_prefix(name)
+        if prefix and prefix in seed_prefixes:
+            candidate.score += 5
+            candidate.reasons.add("score expected subsystem prefix: %s" % prefix)
+        elif prefix and seed_prefixes and not _prefix_compatible(prefix, seed_prefixes, telemetry_allowed):
+            candidate.score -= 6
+            candidate.reasons.add("penalty unrelated subsystem prefix: %s" % prefix)
+        if candidate.discovery_kinds.intersection({"graph", "seed_neighbor"}):
+            candidate.score += 6
+            candidate.reasons.add("score local callgraph relation to exact seed")
+        if not template_allowed and _looks_mangled_or_template(name):
+            candidate.score -= 14
+            candidate.reasons.add("penalty long mangled or template-style name")
+        if not telemetry_allowed and _looks_telemetry_wrapper(name):
+            candidate.score -= 12
+            candidate.reasons.add("penalty generic telemetry wrapper outside telemetry topic")
+        if "fts" in candidate.discovery_kinds and not token_hits and name_lower not in seed_names:
+            candidate.score -= 8
+            candidate.reasons.add("penalty weak fts-only hit without topic token")
 
 
 def _annotate_focused_functions(pack: dict[str, Any], selected: list[Candidate], topic: CanonicalTopic) -> None:
@@ -446,10 +555,13 @@ def _add_candidate(candidates: dict[str, Candidate], function: dict[str, Any], s
         return
     existing = candidates.get(ea)
     if existing is None:
-        existing = Candidate(ea=ea, name=name, score=0, reasons=set())
+        existing = Candidate(ea=ea, name=name, score=0, reasons=set(), tags=set(), discovery_kinds=set())
         candidates[ea] = existing
     existing.score += score
     existing.reasons.add(reason)
+    existing.tags.update(_strings(function.get("tags")))
+    existing.discovery_kinds.update(_discovery_kinds(reason))
+    existing.discovery_kinds.update(_strings(function.get("why_selected")))
     for selected_reason in _strings(function.get("why_selected")):
         existing.reasons.add(selected_reason)
 
@@ -742,6 +854,154 @@ def _reference_payload(value: Any) -> dict[str, str]:
         "url": str(value.get("url", "") or ""),
         "scope": str(value.get("scope", "") or ""),
     }
+
+
+def _topic_tokens(topic: CanonicalTopic) -> set[str]:
+    values = [
+        topic.topic_id,
+        topic.title,
+        topic.question,
+    ]
+    values.extend(_strings(topic.raw.get("queries")))
+    values.extend(_strings(topic.raw.get("seed_names")))
+    values.extend(_strings(topic.raw.get("extra_seed_names")))
+    values.extend(_strings(topic.raw.get("tags")))
+    tokens: set[str] = set()
+    for value in values:
+        tokens.update(_split_tokens(value))
+    stop_words = {
+        "and",
+        "the",
+        "this",
+        "that",
+        "with",
+        "using",
+        "flow",
+        "path",
+        "paths",
+        "object",
+        "kernel",
+        "corpus",
+        "function",
+        "functions",
+    }
+    return {token for token in tokens if len(token) >= 3 and token not in stop_words}
+
+
+def _split_tokens(value: str) -> set[str]:
+    text = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(value or ""))
+    return {
+        item.lower()
+        for item in re.split(r"[^A-Za-z0-9]+", text)
+        if item
+    }
+
+
+def _seed_prefixes(seed_names: list[str]) -> set[str]:
+    prefixes = set()
+    for seed in seed_names:
+        prefix = _kernel_prefix(seed)
+        if prefix:
+            prefixes.add(prefix)
+    return prefixes
+
+
+def _kernel_prefix(name: str) -> str:
+    for prefix in (
+        "Verifier",
+        "wil_details",
+        "Etwp",
+        "Wdip",
+        "Obp",
+        "Psp",
+        "Iop",
+        "Pop",
+        "Cmp",
+        "Sep",
+        "Exp",
+        "Rtl",
+        "Etw",
+        "Wmi",
+        "Nt",
+        "Zw",
+        "Ps",
+        "Ob",
+        "Io",
+        "Mm",
+        "Mi",
+        "Ke",
+        "Ki",
+        "Ex",
+        "Se",
+        "Cm",
+        "Po",
+        "Vf",
+    ):
+        if str(name or "").startswith(prefix):
+            return prefix
+    return ""
+
+
+def _prefix_compatible(prefix: str, seed_prefixes: set[str], telemetry_allowed: bool) -> bool:
+    if telemetry_allowed and prefix in {"Etw", "Etwp", "Wmi", "Wdip"}:
+        return True
+    families = {
+        "Nt": "syscall",
+        "Zw": "syscall",
+        "Ps": "process",
+        "Psp": "process",
+        "Ob": "object",
+        "Obp": "object",
+        "Io": "io",
+        "Iop": "io",
+        "Po": "power",
+        "Pop": "power",
+        "Mm": "memory",
+        "Mi": "memory",
+        "Ke": "kernel",
+        "Ki": "kernel",
+        "Ex": "executive",
+        "Exp": "executive",
+        "Se": "security",
+        "Sep": "security",
+        "Cm": "registry",
+        "Cmp": "registry",
+        "Vf": "verifier",
+        "Verifier": "verifier",
+        "Rtl": "runtime",
+    }
+    family = families.get(prefix, prefix)
+    seed_families = {families.get(item, item) for item in seed_prefixes}
+    return family in seed_families
+
+
+def _looks_mangled_or_template(name: str) -> bool:
+    text = str(name or "")
+    return len(text) > 140 or text.startswith("??$") or "wil_details_" in text
+
+
+def _looks_telemetry_wrapper(name: str) -> bool:
+    text = str(name or "")
+    return text.startswith(("Etwp", "Wdip", "WmiTrace", "TraceLogging"))
+
+
+def _discovery_kinds(reason: str) -> set[str]:
+    text = str(reason or "").lower()
+    kinds = set()
+    if text.startswith("exact seed name"):
+        kinds.add("exact_name")
+    if "seed name search" in text:
+        kinds.add("seed_search")
+    if text.startswith("query:"):
+        kinds.add("fts")
+    if text.startswith("tag:"):
+        kinds.add("tag")
+    if "local graph neighbor" in text:
+        kinds.add("graph")
+        kinds.add("seed_neighbor")
+    if "fallback title query" in text:
+        kinds.add("fallback")
+    return kinds
 
 
 def _strings(value: Any) -> list[str]:

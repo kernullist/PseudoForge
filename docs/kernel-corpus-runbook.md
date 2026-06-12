@@ -228,6 +228,12 @@ catalog lives in:
 tools\kernel_corpus\canonical_topics.json
 ```
 
+The quality expectation manifest lives in:
+
+```text
+tools\kernel_corpus\canonical_expectations.json
+```
+
 List the catalog:
 
 ```powershell
@@ -269,9 +275,37 @@ validation.json
 ```
 
 `answer.md` is a validated baseline, not a final human-reviewed conclusion.
-Validation proves that major claims keep the EA, function name, artifact path,
-and gap/uncertainty discipline. Review `candidate-review.md` and `gaps.md`
-before treating the answer as a polished analysis result.
+Validation is citation lint: it proves that major claims keep the EA, function
+name, artifact path, and gap/uncertainty discipline. It does not prove that the
+selected candidates are the best semantic candidates.
+
+Run the canonical audit before promoting a generated bundle:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_audit.py `
+  --canonical-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\canonical-answers" `
+  --format text `
+  --report-out "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\canonical-answers\quality-report.json"
+```
+
+The audit is candidate-quality lint. It checks generated topic bundles against
+reviewable expectations: required and suspicious function-name regexes,
+preferred and suspicious tags, selected-function count, edge coverage,
+lifecycle phase coverage, validation warnings, source-reference coverage, and
+source identity. It emits:
+
+```text
+<canonical-root>\quality-report.json
+<canonical-root>\quality-report.md
+<topic-dir>\quality.json
+<topic-dir>\quality.md
+```
+
+Generated quality reports are derived research artifacts. Keep them under the
+ignored pack root or another external corpus workspace. Neither answer
+validation nor canonical audit replaces expert review; inspect
+`candidate-review.md`, `gaps.md`, and `quality.md` before treating the answer
+as a polished analysis result.
 
 Local ntoskrnl smoke after the P0/P1 catalog was added:
 
@@ -716,7 +750,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_install_wiring.py `
   tests/test_kernel_corpus_perf_profile.py `
   tests/test_kernel_corpus_vector_recall.py `
-  tests/test_kernel_corpus_canonical_answers.py
+  tests/test_kernel_corpus_canonical_answers.py `
+  tests/test_kernel_corpus_canonical_audit.py
 ```
 
 For documentation-only edits, also run:
@@ -742,5 +777,8 @@ git diff --check -- .
 - Answer harness citation warnings: add EA, function name, and artifact path to
   each major-function bullet; add a gaps section when the evidence pack has
   gaps or uncertainty notes.
+- Canonical audit failures: inspect `quality.md` for missing required
+  functions, forbidden or suspicious candidates, missing lifecycle phases, weak
+  edge coverage, validation warnings, stale source identity, and tuning actions.
 - Very broad answers: build or inspect an evidence pack first, then answer from
   the pack instead of scanning the full corpus ad hoc.
