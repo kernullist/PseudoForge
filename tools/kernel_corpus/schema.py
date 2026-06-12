@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 PACK_SCHEMA_VERSION = "kernel_corpus_pack_v1"
+MANIFEST_SCHEMA_VERSION = "kernel_corpus_manifest_v1"
 EVIDENCE_PACK_SCHEMA_VERSION = "kernel_corpus_evidence_pack_v1"
 PSEUDOFORGE_INDEX_SCHEMA = "pseudoforge_corpus_index_v1"
 
+SQLITE_FILENAME = "corpus.sqlite"
+MANIFEST_FILENAME = "manifest.json"
 INDEX_FILENAME = "pseudoforge-corpus-index.json"
 OVERVIEW_FILENAME = "pseudoforge-corpus-overview.md"
 METADATA_FILENAME = "pseudoforge-corpus-metadata.json"

@@ -7,6 +7,7 @@ from tools.kernel_corpus.errors import InvalidCorpusError, KernelCorpusError, Qu
 from tools.kernel_corpus.paths import CorpusPaths, resolve_corpus_paths, validate_corpus_root
 from tools.kernel_corpus.schema import (
     EVIDENCE_PACK_SCHEMA_VERSION,
+    MANIFEST_SCHEMA_VERSION,
     PACK_SCHEMA_VERSION,
     PSEUDOFORGE_INDEX_SCHEMA,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "EVIDENCE_PACK_SCHEMA_VERSION",
     "InvalidCorpusError",
     "KernelCorpusError",
+    "MANIFEST_SCHEMA_VERSION",
     "PACK_SCHEMA_VERSION",
     "PSEUDOFORGE_INDEX_SCHEMA",
     "QueryError",
