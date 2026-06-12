@@ -136,7 +136,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The initial implementation is complete through Phase 15:
+The implementation is complete through Phase 16:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -171,6 +171,10 @@ The initial implementation is complete through Phase 15:
 15. Experimental vector recall lives under an explicit opt-in experimental
     package, resolves every vector hit back to SQLite function payloads, and
     keeps generated vector indexes outside committed repo state by default.
+16. Canonical answer generation catalogs P0/P1 kernel-analysis topics and
+    emits reviewable answer bundles with evidence packs, traces, prompts,
+    answer drafts, source maps, candidate reviews, gaps, and validation
+    reports under the ignored pack output tree.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -494,6 +498,56 @@ python -B .\tools\kernel_corpus\answer_harness.py `
 
 Prompt and report files are derived artifacts. Store them under the ignored
 pack output tree or another external research folder, not in Git.
+
+## Canonical Answer Artifacts
+
+`tools/kernel_corpus/canonical_topics.json` is the durable catalog of
+canonical kernel-analysis topics. P0 covers core ntoskrnl object, I/O, memory,
+security, callback, dispatch, and synchronization flows. P1 covers security
+and anti-cheat oriented overlays such as remote process access, identity
+sources, token impersonation, callback inventories, telemetry, verifier
+classes, low-resource paths, and deadlock risks.
+
+`tools/kernel_corpus/canonical_answers.py` turns the catalog into generated
+artifact bundles. Each topic directory contains:
+
+```text
+answer.md
+candidate-review.md
+evidence-pack.json
+gaps.md
+manifest.json
+prompt.md
+source-map.md
+trace.json
+validation.json
+```
+
+Lifecycle topics reuse ontology-driven `trace_lifecycle`. Focused topics use a
+bounded mix of exact-name lookup, text search, tag search, and candidate
+scoring before building a normal evidence pack. Every generated `answer.md`
+passes the same evidence-chain validator used by `answer_harness.py`; passing
+validation means the draft preserves EA, function name, artifact path, and gap
+discipline. It does not mean every candidate is semantically final.
+
+Example:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_answers.py build `
+  --pack-root "<pack-root>" `
+  --priority P0 `
+  --priority P1 `
+  --force
+```
+
+Default output:
+
+```text
+<pack-root>\canonical-answers
+```
+
+Generated canonical answer bundles are research artifacts. Keep them under the
+ignored pack root or another external corpus workspace.
 
 ## Pack Freshness Validator
 
@@ -1048,6 +1102,29 @@ Acceptance:
   cost, local storage, and citation-contract risks.
 - Test metadata plumbing with a tiny fake embedding backend.
 
+### Phase 16: Canonical answer artifact generator
+
+Deliver:
+
+```text
+tools/kernel_corpus/canonical_topics.json
+tools/kernel_corpus/canonical_answers.py
+tests/test_kernel_corpus_canonical_answers.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+```
+
+Acceptance:
+
+- Catalog all P0/P1 canonical kernel-analysis topics in a reviewable manifest.
+- Generate per-topic answer bundles under `<pack-root>\canonical-answers`.
+- Keep generated bundles out of Git by default.
+- Support lifecycle and focused retrieval modes.
+- Emit `answer.md`, `evidence-pack.json`, `trace.json`, `prompt.md`,
+  `validation.json`, `candidate-review.md`, `source-map.md`, `gaps.md`, and a
+  per-topic `manifest.json`.
+- Validate generated answer drafts with zero evidence-chain warnings.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -1068,7 +1145,8 @@ Test layers:
    roots, update/delete behavior, and MCP config JSON shape.
 10. Performance profiler tests for fixture build and retrieval coverage.
 11. Vector recall experiment tests with a fake embedding backend.
-12. Optional integration smoke against the real ntoskrnl pack when present.
+12. Canonical answer manifest and fixture-generation tests.
+13. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -1093,6 +1171,8 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Treat atlas hubs as relevance-filtered retrieval hints; generic helpers are
   intentionally suppressed from hub lists.
 - Treat answer harness validation as citation lint, not final factual proof.
+- Treat canonical answer drafts as validated baselines, not polished final
+  reverse-engineering conclusions; review candidate lists before reuse.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 

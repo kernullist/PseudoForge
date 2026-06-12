@@ -1,0 +1,636 @@
+{
+  "schema": "kernel_corpus_canonical_topics_v1",
+  "description": "Canonical Kernel Corpus answer topics for durable evidence-grounded kernel analysis artifacts.",
+  "priorities": {
+    "P0": "Core ntoskrnl concepts that should be answerable from the first Kernel Corpus pack.",
+    "P1": "Security and anti-cheat oriented analysis topics built on top of the P0 corpus base."
+  },
+  "references": {
+    "apc_dpc_timers": {
+      "title": "Kernel support routines for timers and deferred execution",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/_kernel/",
+      "scope": "Public DDI taxonomy for APC, DPC, timer, and worker-thread APIs."
+    },
+    "buffer_ioctl": {
+      "title": "Buffer Descriptions for I/O Control Codes",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/buffer-descriptions-for-i-o-control-codes",
+      "scope": "Public IOCTL buffering model reference."
+    },
+    "cm_callbacks": {
+      "title": "CmRegisterCallbackEx function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-cmregistercallbackex",
+      "scope": "Registry callback registration public contract."
+    },
+    "device_objects": {
+      "title": "Introduction to Device Objects",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/introduction-to-device-objects",
+      "scope": "Public DEVICE_OBJECT and named-device concept reference."
+    },
+    "device_stacks": {
+      "title": "Device Nodes and Device Stacks",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/gettingstarted/device-nodes-and-device-stacks",
+      "scope": "Public device-stack model reference."
+    },
+    "dpc_objects": {
+      "title": "Introduction to DPC Objects",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/introduction-to-dpc-objects",
+      "scope": "Public DPC concept reference."
+    },
+    "driver_entry": {
+      "title": "Driver Entry Points in Driver Objects",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/driver-entry-points-in-driver-objects",
+      "scope": "Public driver object entry point model reference."
+    },
+    "driver_verifier": {
+      "title": "Driver Verifier options and rule classes",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/driver-verifier-options",
+      "scope": "Public verifier rule-class taxonomy."
+    },
+    "etw_drivers": {
+      "title": "About Event Tracing for Drivers",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/about-event-tracing-for-drivers",
+      "scope": "Public ETW/WPP tracing model reference."
+    },
+    "image_notify": {
+      "title": "PsSetLoadImageNotifyRoutine function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetloadimagenotifyroutine",
+      "scope": "Public image-load notification contract."
+    },
+    "io_manager": {
+      "title": "Windows Kernel-Mode I/O Manager",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/windows-kernel-mode-i-o-manager",
+      "scope": "Public I/O manager and IRP model overview."
+    },
+    "ioctl_intro": {
+      "title": "Introduction to I/O Control Codes",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/introduction-to-i-o-control-codes",
+      "scope": "Public IOCTL and DeviceIoControl flow reference."
+    },
+    "irp_device_control": {
+      "title": "IRP_MJ_DEVICE_CONTROL",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/irp-mj-device-control",
+      "scope": "Public device-control IRP reference."
+    },
+    "kernel_objects": {
+      "title": "Managing Kernel Objects",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/managing-kernel-objects",
+      "scope": "Public object manager and kernel object overview."
+    },
+    "low_resources": {
+      "title": "Low Resources Simulation",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/low-resources-simulation",
+      "scope": "Public allocation-failure verifier behavior reference."
+    },
+    "mdl_map": {
+      "title": "MmMapLockedPagesSpecifyCache function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-mmmaplockedpagesspecifycache",
+      "scope": "Public MDL mapping contract."
+    },
+    "memory_drivers": {
+      "title": "Memory Management for Windows Drivers",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/managing-memory-for-drivers",
+      "scope": "Public driver memory management overview."
+    },
+    "object_callbacks": {
+      "title": "ObRegisterCallbacks function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-obregistercallbacks",
+      "scope": "Public object pre/post callback registration contract."
+    },
+    "object_handles": {
+      "title": "Object Handles",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/object-handles",
+      "scope": "Public object handle model reference."
+    },
+    "object_lifecycle": {
+      "title": "Life Cycle of an Object",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/life-cycle-of-an-object",
+      "scope": "Public object reference and lifetime model reference."
+    },
+    "object_names": {
+      "title": "Object Names",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/object-names",
+      "scope": "Public object namespace and name lookup model reference."
+    },
+    "pool_allocation": {
+      "title": "Allocating System-Space Memory",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/allocating-system-space-memory",
+      "scope": "Public pool allocation guidance and ExAllocatePool2 migration note."
+    },
+    "process_lookup": {
+      "title": "PsLookupProcessByProcessId function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-pslookupprocessbyprocessid",
+      "scope": "Public process object lookup contract."
+    },
+    "process_notify": {
+      "title": "PsSetCreateProcessNotifyRoutineEx function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutineex",
+      "scope": "Public process create/exit callback registration contract."
+    },
+    "process_thread_manager": {
+      "title": "Windows Kernel-Mode Process and Thread Manager",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/windows-kernel-mode-process-and-thread-manager",
+      "scope": "Public process/thread manager guidance and callback caveats."
+    },
+    "registry_filtering": {
+      "title": "Filtering Registry Calls",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-calls",
+      "scope": "Public registry filtering model reference."
+    },
+    "security_ref": {
+      "title": "Windows Kernel-Mode Security Reference Monitor",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/windows-kernel-mode-security-reference-monitor",
+      "scope": "Public security reference monitor and Se* DDI overview."
+    },
+    "spin_locks": {
+      "title": "Introduction to Spin Locks",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/introduction-to-spin-locks",
+      "scope": "Public spin-lock and IRQL synchronization reference."
+    },
+    "standard_routines": {
+      "title": "Introduction to Standard Driver Routines",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/introduction-to-standard-driver-routines",
+      "scope": "Public standard driver routine taxonomy."
+    },
+    "thread_notify": {
+      "title": "PsSetCreateThreadNotifyRoutine function",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreatethreadnotifyroutine",
+      "scope": "Public thread create/delete callback registration contract."
+    },
+    "worker_threads": {
+      "title": "System Worker Threads",
+      "url": "https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/system-worker-threads",
+      "scope": "Public work item and system worker-thread model reference."
+    }
+  },
+  "topics": [
+    {
+      "id": "process_object_lifecycle",
+      "priority": "P0",
+      "title": "Process Object Lifecycle",
+      "question": "Explain how this kernel creates, publishes, runs down, and deletes process objects using the major functions in this corpus.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "process_object",
+      "atlas_page": "process",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["kernel_objects", "object_lifecycle", "process_thread_manager", "process_notify", "process_lookup"]
+    },
+    {
+      "id": "thread_object_lifecycle",
+      "priority": "P0",
+      "title": "Thread Object Lifecycle",
+      "question": "Explain how this kernel creates, initializes, schedules, exits, runs down, and deletes thread objects using corpus evidence.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "thread_object",
+      "atlas_page": "process",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["kernel_objects", "object_lifecycle", "process_thread_manager", "thread_notify"]
+    },
+    {
+      "id": "object_manager_lifecycle",
+      "priority": "P0",
+      "title": "Object Manager Lifecycle",
+      "question": "Explain the generic object-manager lifecycle in this kernel: create, insert, reference, handle, close, rundown, and delete.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["ObCreateObject", "ObInsertObject", "ObInsertObjectEx", "ObReferenceObjectByHandle", "ObReferenceObjectByPointer", "ObOpenObjectByPointer", "ObCloseHandle", "ObfDereferenceObject", "ObDereferenceObject", "ObpRemoveObjectRoutine"],
+      "queries": ["object manager", "object header", "insert object", "reference object", "dereference object", "close handle", "delete object"],
+      "tags": ["object_manager"],
+      "source_refs": ["kernel_objects", "object_lifecycle", "object_handles"]
+    },
+    {
+      "id": "handle_open_reference_close",
+      "priority": "P0",
+      "title": "Handle Open Reference Close Flow",
+      "question": "Explain how this kernel opens handles, validates access, references objects, closes handles, and releases object references.",
+      "mode": "focused",
+      "max_functions": 36,
+      "seed_names": ["NtOpenProcess", "ZwOpenProcess", "NtOpenThread", "ObOpenObjectByPointer", "ObReferenceObjectByHandle", "ObReferenceObjectByPointer", "ObfDereferenceObject", "NtClose", "ObCloseHandle", "ObpCloseHandle"],
+      "queries": ["open handle", "object handle", "reference object by handle", "close handle", "handle table", "access mask"],
+      "tags": ["object_manager", "security", "process_thread"],
+      "source_refs": ["object_handles", "object_lifecycle", "security_ref"]
+    },
+    {
+      "id": "object_namespace_lookup",
+      "priority": "P0",
+      "title": "Object Namespace Lookup",
+      "question": "Explain how named kernel objects are resolved through object directories, symbolic links, object attributes, and parse/open paths in this corpus.",
+      "mode": "focused",
+      "max_functions": 36,
+      "seed_names": ["ObOpenObjectByName", "ObReferenceObjectByName", "ObpLookupObjectName", "ObpParseSymbolicLink", "ObCreateObject", "ObInsertObject", "RtlInitUnicodeString"],
+      "queries": ["object name", "object directory", "object attributes", "lookup object name", "symbolic link", "parse object"],
+      "tags": ["object_manager"],
+      "source_refs": ["object_names", "kernel_objects", "object_handles"]
+    },
+    {
+      "id": "security_access_check",
+      "priority": "P0",
+      "title": "Security Access Check",
+      "question": "Explain how this kernel checks security descriptors, access masks, privileges, and token state for protected operations.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["SeAccessCheck", "SePrivilegeCheck", "SeSinglePrivilegeCheck", "SeTokenType", "SeCaptureSubjectContext", "SeLockSubjectContext", "SeReleaseSubjectContext", "SepAccessCheck"],
+      "queries": ["access check", "security descriptor", "privilege check", "subject context", "access mask", "token privilege"],
+      "tags": ["security", "object_manager"],
+      "source_refs": ["security_ref", "object_handles"]
+    },
+    {
+      "id": "syscall_dispatch_path",
+      "priority": "P0",
+      "title": "System Call Dispatch Path",
+      "question": "Explain how this kernel dispatches Nt/Zw system calls from the service entry path to the concrete Nt* implementation.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["KiSystemServiceStart", "KiSystemServiceUser", "KiServiceInternal", "KiServiceTable", "KiSystemCall64", "NtCreateFile", "NtDeviceIoControlFile", "NtCreateUserProcess"],
+      "queries": ["system service", "syscall", "service table", "KiServiceInternal", "NtCreate", "ZwCreate"],
+      "tags": ["dispatch"],
+      "source_refs": ["process_thread_manager", "io_manager"]
+    },
+    {
+      "id": "previous_mode_probe",
+      "priority": "P0",
+      "title": "PreviousMode And User Pointer Probe",
+      "question": "Explain where this kernel distinguishes user-mode and kernel-mode callers and probes user buffers before trusting pointers.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["ProbeForRead", "ProbeForWrite", "ExGetPreviousMode", "KeGetPreviousMode", "MmUserProbeAddress"],
+      "queries": ["PreviousMode", "probe for read", "probe for write", "user buffer", "MmUserProbeAddress", "try except"],
+      "tags": ["security", "memory"],
+      "source_refs": ["security_ref", "memory_drivers"]
+    },
+    {
+      "id": "image_section_load",
+      "priority": "P0",
+      "title": "Image Section Load Flow",
+      "question": "Explain how this kernel maps executable images through section objects and invokes image-load visibility paths.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "module_image",
+      "atlas_page": "memory",
+      "max_seeds": 64,
+      "depth": 2,
+      "extra_seed_names": ["MmLoadSystemImage", "MiMapViewOfImageSection", "PsSetLoadImageNotifyRoutine", "PsSetLoadImageNotifyRoutineEx", "PspLoadImageNotifyRoutine"],
+      "source_refs": ["image_notify", "memory_drivers", "object_lifecycle"]
+    },
+    {
+      "id": "driver_load_unload",
+      "priority": "P0",
+      "title": "Driver Load And Unload Flow",
+      "question": "Explain how this kernel loads a driver image, calls DriverEntry, stores dispatch entry points, and unloads driver resources.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "driver_object",
+      "atlas_page": "io-manager",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["driver_entry", "standard_routines", "kernel_objects"]
+    },
+    {
+      "id": "process_thread_image_callbacks",
+      "priority": "P0",
+      "title": "Process Thread Image Callback Paths",
+      "question": "Inventory the process, thread, and image notification callback registration and invocation paths visible in this kernel corpus.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["PsSetCreateProcessNotifyRoutine", "PsSetCreateProcessNotifyRoutineEx", "PsSetCreateProcessNotifyRoutineEx2", "PspCallProcessNotifyRoutines", "PsSetCreateThreadNotifyRoutine", "PsSetCreateThreadNotifyRoutineEx", "PspCallThreadNotifyRoutines", "PsSetLoadImageNotifyRoutine", "PsSetLoadImageNotifyRoutineEx", "PspLoadImageNotifyRoutine"],
+      "queries": ["process notify", "thread notify", "image notify", "load image notify", "create process notify", "create thread notify"],
+      "tags": ["callback", "process_thread"],
+      "source_refs": ["process_notify", "thread_notify", "image_notify", "process_thread_manager"]
+    },
+    {
+      "id": "ob_callbacks",
+      "priority": "P0",
+      "title": "Object Callback Registration And Dispatch",
+      "question": "Explain how this kernel registers and dispatches object callbacks for process, thread, and desktop handle operations.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["ObRegisterCallbacks", "ObUnRegisterCallbacks", "ObGetFilterVersion", "ObpCallPreOperationCallbacks", "ObpCallPostOperationCallbacks", "ObpCreateHandle", "ObpCloseHandle"],
+      "queries": ["ObRegisterCallbacks", "pre operation callback", "post operation callback", "object callback", "handle operation callback"],
+      "tags": ["object_manager", "callback"],
+      "source_refs": ["object_callbacks", "object_handles"]
+    },
+    {
+      "id": "registry_callbacks",
+      "priority": "P0",
+      "title": "Registry Callback Paths",
+      "question": "Explain how this kernel registers registry callbacks and dispatches create, set, delete, and close registry operations.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "registry_key",
+      "atlas_page": "registry",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["cm_callbacks", "registry_filtering", "kernel_objects"]
+    },
+    {
+      "id": "io_request_lifecycle",
+      "priority": "P0",
+      "title": "I/O Request Lifecycle",
+      "question": "Explain how this kernel creates, sends, stacks, completes, and cancels IRPs across driver stacks.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["IoCallDriver", "IofCallDriver", "IoCompleteRequest", "IofCompleteRequest", "IoAllocateIrp", "IoFreeIrp", "IoCancelIrp", "IoSetCompletionRoutine", "IoGetCurrentIrpStackLocation", "IoGetNextIrpStackLocation"],
+      "queries": ["IRP", "I/O request packet", "complete request", "call driver", "irp stack location", "cancel irp"],
+      "tags": ["io_manager", "dispatch"],
+      "source_refs": ["io_manager"]
+    },
+    {
+      "id": "ioctl_buffer_contracts",
+      "priority": "P0",
+      "title": "IOCTL Buffer Contracts",
+      "question": "Explain how this kernel receives device-control requests and reasons about IOCTL methods, input buffers, output buffers, and system buffers.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["NtDeviceIoControlFile", "ZwDeviceIoControlFile", "IopXxxControlFile", "IopSynchronousServiceTail", "IoBuildDeviceIoControlRequest"],
+      "queries": ["IRP_MJ_DEVICE_CONTROL", "DeviceIoControl", "io control code", "IOCTL", "SystemBuffer", "InputBufferLength", "OutputBufferLength"],
+      "tags": ["dispatch", "io_manager"],
+      "source_refs": ["ioctl_intro", "irp_device_control", "buffer_ioctl"]
+    },
+    {
+      "id": "device_driver_stack",
+      "priority": "P0",
+      "title": "Device And Driver Stack",
+      "question": "Explain how this kernel represents driver objects, device objects, and attached device stacks.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "device_object",
+      "atlas_page": "io-manager",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["device_objects", "device_stacks", "driver_entry"]
+    },
+    {
+      "id": "pnp_power_irp_flow",
+      "priority": "P0",
+      "title": "PnP And Power IRP Flow",
+      "question": "Explain how this kernel routes Plug and Play and power IRPs through device stacks and handles removal or power-state transitions.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["IopSynchronousCall", "IopCallDriverReinitializationRoutines", "IoInvalidateDeviceState", "PoCallDriver", "PoRequestPowerIrp", "PopRequestPowerIrp"],
+      "queries": ["IRP_MJ_PNP", "IRP_MJ_POWER", "surprise removal", "remove device", "power state", "PoCallDriver"],
+      "tags": ["io_manager", "dispatch"],
+      "source_refs": ["device_stacks", "io_manager"]
+    },
+    {
+      "id": "pool_allocation_lifecycle",
+      "priority": "P0",
+      "title": "Pool Allocation Lifecycle",
+      "question": "Explain how this kernel allocates, tags, tracks, and frees pool memory, including common failure and verifier-relevant paths.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["ExAllocatePool2", "ExAllocatePool3", "ExAllocatePoolWithTag", "ExFreePool", "ExFreePoolWithTag", "ExpAllocatePoolWithTagFromNode", "ExAllocatePoolWithQuotaTag"],
+      "queries": ["pool allocation", "pool tag", "ExAllocatePool", "ExFreePool", "quota", "special pool"],
+      "tags": ["memory"],
+      "source_refs": ["memory_drivers", "pool_allocation", "driver_verifier"]
+    },
+    {
+      "id": "mdl_pin_map_lifecycle",
+      "priority": "P0",
+      "title": "MDL Pin Map Unmap Lifecycle",
+      "question": "Explain how this kernel creates MDLs, probes and locks pages, maps locked pages, obtains system addresses, and releases mappings.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["IoAllocateMdl", "IoFreeMdl", "MmProbeAndLockPages", "MmUnlockPages", "MmMapLockedPagesSpecifyCache", "MmUnmapLockedPages", "MmGetSystemAddressForMdlSafe", "MmBuildMdlForNonPagedPool"],
+      "queries": ["MDL", "probe and lock pages", "map locked pages", "unlock pages", "system address for MDL"],
+      "tags": ["memory"],
+      "source_refs": ["mdl_map", "memory_drivers"]
+    },
+    {
+      "id": "virtual_memory_lifecycle",
+      "priority": "P0",
+      "title": "Virtual Memory Lifecycle",
+      "question": "Explain how this kernel allocates, protects, maps, queries, and frees virtual memory for process address spaces.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["NtAllocateVirtualMemory", "ZwAllocateVirtualMemory", "NtFreeVirtualMemory", "NtProtectVirtualMemory", "NtQueryVirtualMemory", "MiAllocateVirtualMemory", "MiProtectVirtualMemory", "MiDeleteVirtualAddresses"],
+      "queries": ["virtual memory", "allocate virtual memory", "protect virtual memory", "free virtual memory", "VAD", "address space"],
+      "tags": ["memory", "process_thread"],
+      "source_refs": ["memory_drivers"]
+    },
+    {
+      "id": "rundown_reference_patterns",
+      "priority": "P0",
+      "title": "Rundown Reference Patterns",
+      "question": "Explain the rundown and reference-protection patterns this kernel uses to avoid teardown races.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["ExInitializeRundownProtection", "ExAcquireRundownProtection", "ExReleaseRundownProtection", "ExWaitForRundownProtectionRelease", "ExRundownCompleted", "PspRundownProcess", "PspRundownSingleProcess"],
+      "queries": ["rundown protection", "rundown reference", "wait for rundown", "teardown", "last reference"],
+      "tags": ["process_thread", "object_manager"],
+      "source_refs": ["object_lifecycle", "process_thread_manager"]
+    },
+    {
+      "id": "sync_irql_locking_rules",
+      "priority": "P0",
+      "title": "Synchronization IRQL And Locking Rules",
+      "question": "Explain the synchronization, IRQL, spin-lock, and wait constraints visible in this kernel corpus.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["KeAcquireSpinLock", "KeReleaseSpinLock", "KeAcquireInStackQueuedSpinLock", "KeReleaseInStackQueuedSpinLock", "KeWaitForSingleObject", "KeEnterCriticalRegion", "KeLeaveCriticalRegion", "ExAcquireResourceExclusiveLite", "ExReleaseResourceLite"],
+      "queries": ["spin lock", "critical region", "IRQL", "wait for single object", "resource exclusive", "dispatcher object"],
+      "tags": ["synchronization", "dispatch"],
+      "source_refs": ["spin_locks", "dpc_objects"]
+    },
+    {
+      "id": "apc_dpc_workitem_timer",
+      "priority": "P0",
+      "title": "APC DPC Work Item And Timer Flow",
+      "question": "Explain how this kernel schedules deferred execution through APCs, DPCs, work items, system worker threads, and timers.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["KeInitializeDpc", "KeInsertQueueDpc", "KeRemoveQueueDpc", "KeInitializeApc", "KeInsertQueueApc", "IoAllocateWorkItem", "IoQueueWorkItem", "ExQueueWorkItem", "KeSetTimer", "KeSetTimerEx", "KeCancelTimer"],
+      "queries": ["DPC", "APC", "work item", "worker thread", "timer", "queue work item"],
+      "tags": ["dispatch", "callback"],
+      "source_refs": ["dpc_objects", "worker_threads", "apc_dpc_timers"]
+    },
+    {
+      "id": "exception_bugcheck_path",
+      "priority": "P0",
+      "title": "Exception And Bugcheck Path",
+      "question": "Explain how this kernel routes exceptions, raises hard failures, and enters bugcheck paths for unrecoverable corruption.",
+      "mode": "focused",
+      "max_functions": 40,
+      "seed_names": ["KeBugCheck", "KeBugCheckEx", "KiBugCheckDispatch", "KiDispatchException", "ExRaiseStatus", "RtlRaiseStatus"],
+      "queries": ["bugcheck", "raise status", "dispatch exception", "kernel exception", "unrecoverable"],
+      "tags": ["dispatch", "security"],
+      "source_refs": ["driver_verifier"]
+    },
+    {
+      "id": "process_identity_sources",
+      "priority": "P1",
+      "title": "Process Identity Sources",
+      "question": "Explain which kernel paths expose process identity, including process ID, image file name, file object linkage, and token-related identity.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["PsGetProcessId", "PsGetCurrentProcessId", "PsLookupProcessByProcessId", "PsGetProcessImageFileName", "SeLocateProcessImageName", "PsReferenceProcessFilePointer", "IoGetInitiatorProcess"],
+      "queries": ["process id", "process image file name", "image name", "process file pointer", "initiator process", "current process id"],
+      "tags": ["process_thread", "security", "file"],
+      "source_refs": ["process_lookup", "process_thread_manager", "security_ref"]
+    },
+    {
+      "id": "token_impersonation_flow",
+      "priority": "P1",
+      "title": "Token And Impersonation Flow",
+      "question": "Explain how this kernel handles primary tokens, impersonation tokens, subject context capture, and privilege checks.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["PsReferencePrimaryToken", "PsDereferencePrimaryToken", "PsReferenceImpersonationToken", "PsImpersonateClient", "PsRevertToSelf", "SeCaptureSubjectContext", "SeTokenType", "SePrivilegeCheck", "NtImpersonateThread", "NtImpersonateAnonymousToken"],
+      "queries": ["primary token", "impersonation token", "subject context", "privilege check", "impersonate"],
+      "tags": ["security", "process_thread"],
+      "source_refs": ["security_ref", "process_thread_manager"]
+    },
+    {
+      "id": "section_file_process_linkage",
+      "priority": "P1",
+      "title": "Section File Process Linkage",
+      "question": "Explain how file objects, section objects, image sections, and process address spaces link together in this corpus.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "section_object",
+      "atlas_page": "memory",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["memory_drivers", "object_lifecycle", "image_notify"]
+    },
+    {
+      "id": "remote_process_access_flow",
+      "priority": "P1",
+      "title": "Remote Process Access Flow",
+      "question": "Explain the corpus-visible paths for opening, querying, reading, writing, and otherwise accessing another process.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["NtOpenProcess", "ZwOpenProcess", "PsLookupProcessByProcessId", "ObReferenceObjectByHandle", "NtReadVirtualMemory", "NtWriteVirtualMemory", "MmCopyVirtualMemory", "NtQueryInformationProcess", "NtSetInformationProcess"],
+      "queries": ["open process", "read virtual memory", "write virtual memory", "copy virtual memory", "query information process", "set information process"],
+      "tags": ["process_thread", "memory", "security"],
+      "source_refs": ["process_lookup", "object_handles", "security_ref"]
+    },
+    {
+      "id": "memory_copy_user_kernel",
+      "priority": "P1",
+      "title": "User Kernel Memory Copy Flow",
+      "question": "Explain how this kernel copies data between user and kernel address spaces, validates access, and handles cross-process copies.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["MmCopyVirtualMemory", "MmCopyMemory", "RtlCopyMemory", "ProbeForRead", "ProbeForWrite", "NtReadVirtualMemory", "NtWriteVirtualMemory"],
+      "queries": ["copy virtual memory", "copy memory", "probe user buffer", "read virtual memory", "write virtual memory", "user address"],
+      "tags": ["memory", "security", "process_thread"],
+      "source_refs": ["memory_drivers", "security_ref"]
+    },
+    {
+      "id": "module_load_visibility",
+      "priority": "P1",
+      "title": "Module Load Visibility",
+      "question": "Explain the user-image and kernel-image load visibility paths, including image notify callbacks and system image load helpers.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "module_image",
+      "atlas_page": "memory",
+      "max_seeds": 72,
+      "depth": 2,
+      "source_refs": ["image_notify", "process_thread_manager"]
+    },
+    {
+      "id": "callback_registration_inventory",
+      "priority": "P1",
+      "title": "Callback Registration Inventory",
+      "question": "Inventory the major callback registration APIs and internal dispatch paths visible in this corpus.",
+      "mode": "focused",
+      "max_functions": 64,
+      "seed_names": ["PsSetCreateProcessNotifyRoutine", "PsSetCreateProcessNotifyRoutineEx", "PsSetCreateThreadNotifyRoutine", "PsSetLoadImageNotifyRoutine", "ObRegisterCallbacks", "CmRegisterCallbackEx", "IoRegisterShutdownNotification", "IoRegisterPlugPlayNotification"],
+      "queries": ["register callback", "notify routine", "callback registration", "unregister callback", "process notify", "thread notify", "load image notify", "registry callback", "object callback"],
+      "tags": ["callback", "object_manager", "process_thread"],
+      "source_refs": ["process_notify", "thread_notify", "image_notify", "object_callbacks", "cm_callbacks"]
+    },
+    {
+      "id": "notification_callback_constraints",
+      "priority": "P1",
+      "title": "Notification Callback Constraints",
+      "question": "Explain the operational constraints and offload patterns around process, thread, image, registry, and object callbacks in this corpus.",
+      "mode": "focused",
+      "max_functions": 56,
+      "seed_names": ["PspCallProcessNotifyRoutines", "PspCallThreadNotifyRoutines", "PspLoadImageNotifyRoutine", "CmRegisterCallbackEx", "ObRegisterCallbacks", "ExQueueWorkItem", "IoQueueWorkItem"],
+      "queries": ["notify routine", "callback", "queue work item", "worker thread", "reentrancy", "deadlock", "PASSIVE_LEVEL"],
+      "tags": ["callback", "dispatch", "process_thread"],
+      "source_refs": ["process_thread_manager", "worker_threads", "process_notify", "thread_notify", "image_notify"]
+    },
+    {
+      "id": "driver_object_dispatch_table",
+      "priority": "P1",
+      "title": "Driver Object Dispatch Table",
+      "question": "Explain how driver objects hold DriverEntry-initialized dispatch tables, unload routines, AddDevice pointers, and major-function handlers.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["IopInitializeBuiltinDriver", "IopLoadDriver", "IopDeleteDriver", "IoCreateDriver", "IopCreateDriver", "DriverEntry"],
+      "queries": ["DriverObject", "MajorFunction", "DriverUnload", "AddDevice", "dispatch routine", "DriverEntry"],
+      "tags": ["io_manager", "dispatch"],
+      "source_refs": ["driver_entry", "standard_routines"]
+    },
+    {
+      "id": "file_object_lifecycle",
+      "priority": "P1",
+      "title": "File Object Lifecycle",
+      "question": "Explain how this kernel creates, initializes, references, cleans up, closes, and deletes file objects.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "file_object",
+      "atlas_page": "io-manager",
+      "max_seeds": 64,
+      "depth": 2,
+      "source_refs": ["kernel_objects", "object_lifecycle", "io_manager"]
+    },
+    {
+      "id": "registry_operation_lifecycle",
+      "priority": "P1",
+      "title": "Registry Operation Lifecycle",
+      "question": "Explain create, open, set, delete, enumerate, callback, and close paths for registry key operations in this kernel corpus.",
+      "mode": "lifecycle",
+      "lifecycle_topic": "registry_key",
+      "atlas_page": "registry",
+      "max_seeds": 72,
+      "depth": 2,
+      "source_refs": ["cm_callbacks", "registry_filtering", "kernel_objects"]
+    },
+    {
+      "id": "kernel_telemetry_etw_wpp",
+      "priority": "P1",
+      "title": "Kernel Telemetry ETW WPP Flow",
+      "question": "Explain which corpus-visible paths relate to kernel tracing, ETW/WPP-style event publication, and diagnostic visibility.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["EtwRegister", "EtwUnregister", "EtwWrite", "EtwEventWrite", "WmiTraceMessage", "IoWMIRegistrationControl"],
+      "queries": ["ETW", "event tracing", "WPP", "trace message", "WMI registration", "EtwWrite"],
+      "tags": ["callback", "dispatch"],
+      "source_refs": ["etw_drivers"]
+    },
+    {
+      "id": "verifier_failure_classes",
+      "priority": "P1",
+      "title": "Verifier Failure Classes",
+      "question": "Explain which corpus-visible paths relate to driver verifier classes such as IRQL checking, pool tracking, I/O verification, deadlock detection, and DMA checks.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["VerifierBugCheckIfAppropriate", "VfFailDriver", "VfCheckForResource", "VfDeadlockAcquireResource", "VfDeadlockReleaseResource", "VfIrqlLogRaise", "VfIrqlLogLower"],
+      "queries": ["verifier", "driver verifier", "deadlock", "IRQL checking", "pool tracking", "I/O verification", "DMA checking"],
+      "tags": ["memory", "dispatch", "security"],
+      "source_refs": ["driver_verifier"]
+    },
+    {
+      "id": "low_resource_failure_paths",
+      "priority": "P1",
+      "title": "Low Resource Failure Paths",
+      "question": "Explain how this kernel handles allocation failure, low-resource simulation, cleanup unwinding, and recoverable failure paths.",
+      "mode": "focused",
+      "max_functions": 48,
+      "seed_names": ["ExAllocatePool2", "ExAllocatePool3", "IoAllocateIrp", "IoAllocateMdl", "MmAllocatePagesForMdlEx", "MmMapLockedPagesSpecifyCache", "VerifierBugCheckIfAppropriate"],
+      "queries": ["low resources", "allocation failed", "insufficient resources", "STATUS_INSUFFICIENT_RESOURCES", "cleanup", "failure path"],
+      "tags": ["memory", "io_manager"],
+      "source_refs": ["low_resources", "pool_allocation", "memory_drivers"]
+    },
+    {
+      "id": "lock_hierarchy_deadlock_risks",
+      "priority": "P1",
+      "title": "Lock Hierarchy And Deadlock Risks",
+      "question": "Explain corpus-visible lock hierarchy, spin lock, resource lock, critical region, rundown, and verifier deadlock-risk paths.",
+      "mode": "focused",
+      "max_functions": 56,
+      "seed_names": ["KeAcquireSpinLock", "KeReleaseSpinLock", "ExAcquireResourceExclusiveLite", "ExReleaseResourceLite", "KeEnterCriticalRegion", "KeLeaveCriticalRegion", "ExAcquireRundownProtection", "ExWaitForRundownProtectionRelease", "VfDeadlockAcquireResource"],
+      "queries": ["deadlock", "spin lock", "resource exclusive", "critical region", "rundown protection", "lock hierarchy"],
+      "tags": ["synchronization", "dispatch", "memory"],
+      "source_refs": ["spin_locks", "driver_verifier", "object_lifecycle"]
+    }
+  ]
+}

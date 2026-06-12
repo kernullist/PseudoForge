@@ -504,6 +504,9 @@ def _artifact_paths(function: FunctionEvidence) -> list[str]:
 
 def _matching_functions(line: str, functions: list[FunctionEvidence]) -> list[FunctionEvidence]:
     lowered = line.lower()
+    ea_matches = [function for function in functions if function.ea and function.ea.lower() in lowered]
+    if ea_matches:
+        return ea_matches
     result = []
     for function in functions:
         if function.name and function.name in line:

@@ -218,6 +218,73 @@ Generated prompts, answers, and validation reports are derived research
 artifacts. Keep them under `pseudoforge_out/` or an external corpus folder; do
 not commit them.
 
+## Build Canonical Answer Artifacts
+
+Use the canonical answer generator when you want a durable batch of
+evidence-grounded baseline answers rather than a one-off prompt. The topic
+catalog lives in:
+
+```text
+tools\kernel_corpus\canonical_topics.json
+```
+
+List the catalog:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_answers.py list `
+  --priority P0
+
+python -B .\tools\kernel_corpus\canonical_answers.py list `
+  --priority P1
+```
+
+Build all P0/P1 bundles for a pack:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_answers.py build `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --priority P0 `
+  --priority P1 `
+  --force
+```
+
+Default output:
+
+```text
+<pack-root>\canonical-answers
+```
+
+Each topic directory contains:
+
+```text
+answer.md
+candidate-review.md
+evidence-pack.json
+gaps.md
+manifest.json
+prompt.md
+source-map.md
+trace.json
+validation.json
+```
+
+`answer.md` is a validated baseline, not a final human-reviewed conclusion.
+Validation proves that major claims keep the EA, function name, artifact path,
+and gap/uncertainty discipline. Review `candidate-review.md` and `gaps.md`
+before treating the answer as a polished analysis result.
+
+Local ntoskrnl smoke after the P0/P1 catalog was added:
+
+```text
+topics=39
+P0=24
+P1=15
+passed=39
+failed=0
+validation warnings=0
+generated files=353
+```
+
 ## Trace Lifecycles
 
 Trace a process object lifecycle:
@@ -648,7 +715,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_validate_pack.py `
   tests/test_kernel_corpus_install_wiring.py `
   tests/test_kernel_corpus_perf_profile.py `
-  tests/test_kernel_corpus_vector_recall.py
+  tests/test_kernel_corpus_vector_recall.py `
+  tests/test_kernel_corpus_canonical_answers.py
 ```
 
 For documentation-only edits, also run:

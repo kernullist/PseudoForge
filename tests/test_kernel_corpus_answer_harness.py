@@ -81,6 +81,42 @@ class KernelCorpusAnswerHarnessTests(unittest.TestCase):
             self.assertIn("missing_nearby_artifact_path", warning_codes)
             self.assertIn("missing_gaps_section", warning_codes)
 
+    def test_validation_prefers_ea_matches_over_name_substrings(self) -> None:
+        pack = {
+            "schema": "kernel_corpus_evidence_pack_v1",
+            "topic": "security_access_check",
+            "functions": [
+                {
+                    "ea": "0x140001000",
+                    "name": "SeAccessCheck",
+                    "artifacts": {
+                        "summary": r"C:\corpus\SeAccessCheck.json",
+                    },
+                },
+                {
+                    "ea": "0x140002000",
+                    "name": "SeAccessCheckWithHint",
+                    "artifacts": {
+                        "summary": r"C:\corpus\SeAccessCheckWithHint.json",
+                    },
+                },
+            ],
+            "gaps": [],
+        }
+        answer = "\n".join(
+            [
+                "Major functions:",
+                r"- `0x140002000` `SeAccessCheckWithHint`: hinted check. Artifact: `C:\corpus\SeAccessCheckWithHint.json`. Inference: confirmed corpus evidence.",
+            ]
+        )
+
+        report = validate_answer(pack, answer)
+
+        self.assertTrue(report["passed"])
+        self.assertEqual(0, report["warning_count"])
+        self.assertEqual(1, report["checked_major_function_bullets"])
+        self.assertEqual(1, report["cited_function_count"])
+
     def test_cli_writes_prompt_and_report(self) -> None:
         with _built_pack() as pack_root:
             evidence_path, pack = _write_fixture_evidence_pack(pack_root)
