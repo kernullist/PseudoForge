@@ -151,6 +151,34 @@ python -B .\tools\kernel_corpus\query.py build-evidence-pack `
 The evidence pack is the answer boundary for focused analysis. Agents should
 cite the pack and the underlying function artifacts.
 
+## Build And Validate Answer Prompts
+
+Use the answer harness when handing an evidence pack to an AI model or checking
+that a drafted answer preserved the evidence chain:
+
+```powershell
+python -B .\tools\kernel_corpus\answer_harness.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --evidence-pack "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\evidence-packs\process_object.json" `
+  --question "Explain how process objects are created, published, notified, exited, and deleted in this ntoskrnl build." `
+  --atlas-page process.md `
+  --prompt-out "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\answer-prompts\process_object.md" `
+  --answer-in "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\answers\process_object.md" `
+  --report-out "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\answer-reports\process_object.json"
+```
+
+`--answer-in` is optional. Without it, the harness only writes or returns the
+bounded prompt. With it, the harness emits warning-only validation JSON for:
+
+- major-function bullets that mention a known function without its EA
+- bullets that omit the function name
+- claims that lack a nearby artifact path from the evidence pack
+- answers that omit gaps or uncertainty when the evidence pack has gaps
+
+Generated prompts, answers, and validation reports are derived research
+artifacts. Keep them under `pseudoforge_out/` or an external corpus folder; do
+not commit them.
+
 ## Trace Lifecycles
 
 Trace a process object lifecycle:
@@ -307,6 +335,10 @@ callgraph, import/string, or evidence-pack questions from a kernel corpus. The
 skill contains retrieval procedure and answer contracts only; it does not
 contain corpus data.
 
+For durable answer handoff, combine the skill with
+`tools\kernel_corpus\answer_harness.py` so the final prompt and validation
+report are reproducible.
+
 ## Freshness Rules
 
 Rebuild the pack when any of these changes:
@@ -333,7 +365,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_mcp_contract.py `
   tests/test_kernel_corpus_lifecycle.py `
   tests/test_kernel_corpus_skill.py `
-  tests/test_kernel_corpus_atlas.py
+  tests/test_kernel_corpus_atlas.py `
+  tests/test_kernel_corpus_answer_harness.py
 ```
 
 For documentation-only edits, also run:
@@ -352,5 +385,8 @@ git diff --check -- .
 - Weak lifecycle edges: increase `--depth` within the bounded limit and inspect
   `neighbors` around high-confidence functions.
 - Stale atlas page: regenerate the atlas after pack rebuild.
+- Answer harness citation warnings: add EA, function name, and artifact path to
+  each major-function bullet; add a gaps section when the evidence pack has
+  gaps or uncertainty notes.
 - Very broad answers: build or inspect an evidence pack first, then answer from
   the pack instead of scanning the full corpus ad hoc.

@@ -24,6 +24,7 @@ Keep this project separate from the installed IDA plugin code.
 tools/
   kernel_corpus/
     DESIGN.md
+    answer_harness.py
     atlas.py
     builder.py
     ea.py
@@ -109,6 +110,10 @@ The builder creates a compact knowledge pack:
   corpus.sqlite
   evidence-packs/
     <topic>.json
+  answer-prompts/
+    <topic>.md
+  answer-reports/
+    <topic>.json
   reports/
     corpus-status.md
     atlas/
@@ -125,7 +130,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The initial implementation is complete through Phase 9:
+The initial implementation is complete through Phase 10:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -141,6 +146,9 @@ The initial implementation is complete through Phase 9:
    generated-output boundaries.
 8. MCP atlas tools generate, list, and return bounded atlas Markdown pages.
 9. Expanded lifecycle ontologies cover additional object and subsystem flows.
+10. The answer harness turns evidence packs into bounded AI prompts and checks
+    answer Markdown for missing EA, function-name, artifact-path, and gap
+    discipline warnings.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -430,6 +438,36 @@ question.
 The evidence pack is the answer boundary. The AI should cite it and the
 underlying artifact paths.
 
+## Answer Harness
+
+`tools/kernel_corpus/answer_harness.py` is the local bridge between a retrieved
+evidence pack and an AI answer. It does not call a model. It builds a bounded
+prompt that contains corpus identity, evidence-pack summary, selected
+functions, selected edges, gaps, optional atlas context, and the answer
+contract. It deliberately avoids copying full raw corpus contents into the
+prompt.
+
+Validation mode reads a Markdown answer and emits warning-only JSON. It checks
+that major-function bullets include the EA and function name, that an artifact
+path from the evidence pack appears near the claim, and that answers include a
+gaps or uncertainty section when the evidence pack records gaps.
+
+Example:
+
+```powershell
+python -B .\tools\kernel_corpus\answer_harness.py `
+  --pack-root "<pack-root>" `
+  --evidence-pack "<pack-root>\evidence-packs\process_object.json" `
+  --question "Explain this kernel's process object lifecycle." `
+  --atlas-page process.md `
+  --prompt-out "<pack-root>\answer-prompts\process_object.md" `
+  --answer-in "<pack-root>\answers\process_object.md" `
+  --report-out "<pack-root>\answer-reports\process_object.json"
+```
+
+Prompt and report files are derived artifacts. Store them under the ignored
+pack output tree or another external research folder, not in Git.
+
 ## Skill Layer
 
 The skill should be small. It should not contain the ntoskrnl corpus. It should
@@ -449,7 +487,9 @@ Core skill rules:
 4. Separate confirmed evidence from inference.
 5. Build an evidence pack for broad questions.
 6. For lifecycle questions, call `trace_lifecycle` first.
-7. If the corpus is partial or stale, state the limitation.
+7. For durable handoff or review, run `answer_harness.py` to produce the
+   prompt and warning report.
+8. If the corpus is partial or stale, state the limitation.
 
 ## Answer Contract
 
@@ -480,6 +520,10 @@ Gaps:
 No answer should claim that a transition is proven unless the evidence pack
 contains the supporting function or edge.
 
+The answer harness enforces this contract as lint-style warnings. A warning is
+not proof the answer is wrong, but it marks claims that need citation,
+uncertainty, or manual review before reuse.
+
 ## Example Flow
 
 User asks:
@@ -494,7 +538,9 @@ Agent workflow:
 2. `trace_lifecycle(pack_root, "process_object", depth=2)`
 3. `get_function` for the highest-impact functions in each phase
 4. Optionally `get_neighbors` around ambiguous edges
-5. Produce an evidence-grounded narrative with citations
+5. Build a bounded prompt with `answer_harness.py`
+6. Produce an evidence-grounded narrative with citations
+7. Validate the answer with `answer_harness.py --answer-in`
 
 The final answer should read like a kernel reverse-engineering report, not a
 generic OS textbook explanation.
@@ -678,6 +724,27 @@ Acceptance:
 - A synthetic `file_object` graph maps major seed functions to lifecycle
   phases.
 
+### Phase 10: Answer harness
+
+Deliver:
+
+```text
+tools/kernel_corpus/answer_harness.py
+tests/test_kernel_corpus_answer_harness.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/skills/kernel-corpus-analysis/SKILL.md
+```
+
+Acceptance:
+
+- Generate a bounded prompt from a fixture evidence pack without embedding raw
+  full corpus contents.
+- Include corpus identity, evidence summary, selected functions, edges, gaps,
+  optional atlas context, and the answer contract.
+- Validate Markdown answers with warnings for missing EA, function name,
+  nearby artifact path, or required gaps/uncertainty section.
+- Keep generated prompts and reports under ignored or external output roots.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -690,7 +757,8 @@ Test layers:
 3. Query tests for FTS and graph traversal.
 4. MCP contract tests with fixed JSON snapshots.
 5. Lifecycle phase assignment tests with synthetic function graphs.
-6. Optional integration smoke against the real ntoskrnl pack when present.
+6. Answer harness tests for prompt generation and citation warnings.
+7. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -702,6 +770,7 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Never mutate the source PseudoForge corpus from MCP tools.
 - Never update the IDB from this tool.
 - Keep lifecycle heuristics reviewable as JSON ontology plus Python scoring.
+- Treat answer harness validation as citation lint, not final factual proof.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 
@@ -716,5 +785,6 @@ The first production-worthy milestone is:
 
 ```text
 PseudoForge corpus -> corpus.sqlite -> MCP search/get/neighbor tools ->
-trace_lifecycle(process_object) -> evidence pack -> grounded AI answer
+trace_lifecycle(process_object) -> evidence pack -> answer harness ->
+grounded AI answer
 ```

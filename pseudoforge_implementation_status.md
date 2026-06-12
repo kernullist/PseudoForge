@@ -269,8 +269,8 @@ Implemented in this folder:
    - corpus artifacts are agent-agnostic handoff files: external agents can read the corpus index, metadata, overview, per-function bundles, or focused `qa-context.md` files without IDA or PseudoForge runtime access
    - `docs/pseudoforge-corpus-agent-skill.md` provides a copy-ready Markdown skill that tells other AI agents how to use the full batch corpus for grounded binary Q&A
    - the corpus-agent skill documents the recommended split between `%USERPROFILE%\.codex\skills\pseudoforge-corpus-qa\SKILL.md` for the skill and `F:\pseudoforge-corpora\<target-name>\` or repo-local `pseudoforge_out\<target-name>\` for generated artifacts
-   - `tools/kernel_corpus/` provides the consumer-side Kernel Corpus pack layer: SQLite builder, read-only query CLI, stdio MCP server, lifecycle tracer, subsystem atlas generator, expanded lifecycle ontologies, and the `kernel-corpus-analysis` skill
-   - `docs/kernel-corpus-runbook.md` documents the Kernel Corpus build, status, query, lifecycle, atlas, MCP, skill, freshness, and validation workflow while keeping generated packs under ignored or external output roots
+   - `tools/kernel_corpus/` provides the consumer-side Kernel Corpus pack layer: SQLite builder, read-only query CLI, stdio MCP server, lifecycle tracer, subsystem atlas generator, answer harness, expanded lifecycle ontologies, and the `kernel-corpus-analysis` skill
+   - `docs/kernel-corpus-runbook.md` documents the Kernel Corpus build, status, query, lifecycle, atlas, answer-prompt harness, MCP, skill, freshness, and validation workflow while keeping generated packs under ignored or external output roots
    - optional `--compare-dir` / `-CompareDir` emits per-function raw Hex-Rays text, PseudoForge cleaned output, full `.forge` section, and raw-vs-cleaned unified diff artifacts
    - batch compare JSONL records include shared-style artifact keys while preserving legacy path fields
    - optional `--llm-renames` / `-LlmRenames` routes batch analysis through the same rename provider/fallback path as interactive IDA Analyze

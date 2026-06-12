@@ -44,6 +44,12 @@ Local subsystem atlas fallback:
 python -B .\tools\kernel_corpus\atlas.py --pack-root "<pack-root>" --output-dir "<pack-root>\reports\atlas"
 ```
 
+Local answer harness fallback:
+
+```powershell
+python -B .\tools\kernel_corpus\answer_harness.py --pack-root "<pack-root>" --evidence-pack "<pack-root>\evidence-packs\process_object.json" --question "<question>" --atlas-page process.md --prompt-out "<pack-root>\answer-prompts\process_object.md" --answer-in "<pack-root>\answers\process_object.md" --report-out "<pack-root>\answer-reports\process_object.json"
+```
+
 ## Tool Workflow
 
 - Lifecycle questions: call `trace_lifecycle` first with `topic` such as `process_object`, `thread_object`, `file_object`, `driver_object`, `device_object`, `registry_key`, `section_object`, or `module_image`, then inspect high-impact functions with `get_function`, and use `get_neighbors` for ambiguous transitions.
@@ -51,6 +57,7 @@ python -B .\tools\kernel_corpus\atlas.py --pack-root "<pack-root>" --output-dir 
 - Subsystem questions: generate or inspect atlas pages first when available; then search by names, tags, imports, and strings; expand nearby callers/callees; build an evidence pack for broad answers.
 - Import/string questions: use `search_by_import` or `search_by_string`, then verify with `get_function`.
 - Broad answers: call `build_evidence_pack` or `trace_lifecycle` and treat the pack as the answer boundary.
+- Durable handoff or review: call the local answer harness to generate the bounded prompt and validate the drafted Markdown answer.
 
 ## Evidence Discipline
 
@@ -59,6 +66,7 @@ python -B .\tools\kernel_corpus\atlas.py --pack-root "<pack-root>" --output-dir 
 - Treat lifecycle phase labels and LLM rename suggestions as hypotheses until supported by function evidence or edges.
 - State gaps from skipped functions, missing exact seeds, missing edges, stale packs, or low-confidence phase assignments.
 - Do not claim a transition is proven unless the evidence pack contains a supporting edge or function relationship.
+- Treat answer harness warnings as citation lint that must be reviewed before reusing an answer.
 - Do not mutate the source corpus or IDB. Writing a derived evidence pack is acceptable only when the workflow or user asks for a durable artifact.
 
 ## Korean Query Mapping
