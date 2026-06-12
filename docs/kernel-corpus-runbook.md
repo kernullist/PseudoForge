@@ -267,6 +267,10 @@ Treat phase labels as corpus-backed hypotheses. If the evidence pack reports
 missing exact seeds, weak edges, skipped functions, or low-confidence phases,
 state those gaps in the final answer.
 
+Lifecycle selection favors exact seed and target-topic evidence. Broad-term or
+graph-neighbor candidates whose names clearly belong to another lifecycle topic
+are demoted rather than treated as equal lifecycle evidence.
+
 ## Generate The Atlas
 
 Generate deterministic subsystem maps:
@@ -293,6 +297,9 @@ thread.md
 
 Use atlas pages for discovery and orientation. Do not treat them as final
 proof; inspect referenced functions and evidence packs for important claims.
+Atlas hub lists are relevance-filtered. Generic helpers, validation wrappers,
+feature-flag probes, and subsystem-irrelevant neighbors are intentionally
+suppressed so the hub section stays useful for review.
 
 ## Run The MCP Server
 

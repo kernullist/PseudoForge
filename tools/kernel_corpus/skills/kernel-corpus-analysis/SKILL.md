@@ -72,6 +72,7 @@ python -B .\tools\kernel_corpus\answer_harness.py --pack-root "<pack-root>" --ev
 - Cite EA, function name, and artifact path for important claims.
 - Separate confirmed corpus evidence from inference.
 - Treat lifecycle phase labels and LLM rename suggestions as hypotheses until supported by function evidence or edges.
+- Expect broad graph-neighbor lifecycle candidates from another object topic to be lower-quality unless the evidence pack records exact seed or target-topic evidence.
 - State gaps from skipped functions, missing exact seeds, missing edges, stale packs, or low-confidence phase assignments.
 - Do not claim a transition is proven unless the evidence pack contains a supporting edge or function relationship.
 - Do not hide validator errors. Rebuild stale packs or derived artifacts before answering, unless the user explicitly wants a stale-pack comparison.
@@ -164,6 +165,8 @@ Operational interpretation:
 Gaps and next retrieval:
 - Missing tags, skipped functions, deeper neighbors, or extra evidence packs to build.
 ```
+
+Atlas hub lists are filtered retrieval hints. Generic helpers and subsystem-unrelated neighbors may be intentionally absent; use `get_neighbors` for exhaustive graph expansion.
 
 ## Guardrails
 

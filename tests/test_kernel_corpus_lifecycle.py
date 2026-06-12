@@ -154,6 +154,62 @@ class KernelCorpusLifecycleTests(unittest.TestCase):
             )
             self.assertIn("Exact seed not found: PspExitProcess", pack["gaps"])
 
+    def test_process_lifecycle_penalizes_thread_only_neighbors(self) -> None:
+        functions = [
+            _function(
+                "0x140001000",
+                "NtTerminateProcess",
+                ["process_thread"],
+                ["terminate process"],
+                ["0x140002000", "0x140003000"],
+            ),
+            _function(
+                "0x140002000",
+                "PspTerminateThreadByPointer",
+                ["process_thread"],
+                ["terminate thread"],
+                [],
+            ),
+            _function(
+                "0x140003000",
+                "PspTerminateProcess",
+                ["process_thread"],
+                ["terminate process"],
+                [],
+            ),
+            _function(
+                "0x140004000",
+                "PspTerminateAllThreads",
+                ["process_thread"],
+                ["terminate thread"],
+                [],
+            ),
+        ]
+        with _built_pack(functions) as pack_root:
+            pack = trace_lifecycle(pack_root, "process_object", max_seeds=10, depth=1)
+
+            candidates = {item["name"]: item for item in pack["candidates"]}
+            self.assertLess(
+                candidates["PspTerminateThreadByPointer"]["confidence"],
+                candidates["PspTerminateProcess"]["confidence"],
+            )
+            self.assertTrue(
+                any(
+                    "topic relevance penalty" in item
+                    for item in candidates["PspTerminateThreadByPointer"]["why_selected"]
+                )
+            )
+            self.assertLess(
+                candidates["PspTerminateAllThreads"]["confidence"],
+                candidates["PspTerminateProcess"]["confidence"],
+            )
+            self.assertTrue(
+                any(
+                    "topic relevance penalty" in item
+                    for item in candidates["PspTerminateAllThreads"]["why_selected"]
+                )
+            )
+
     def test_evidence_pack_contains_paths_phase_labels_and_writes_output(self) -> None:
         functions = [
             _function("0x140001000", "NtCreateUserProcess", ["process_thread"], ["create", "process"], ["0x140002000"]),

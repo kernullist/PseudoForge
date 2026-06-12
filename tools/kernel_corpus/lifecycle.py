@@ -35,6 +35,16 @@ PHASE_ORDER = (
     "delete",
 )
 KERNEL_PREFIXES = ("Psp", "Nt", "Zw", "Ps", "Ob", "Mm", "Se")
+OBJECT_TOPIC_TOKEN_GROUPS = {
+    "process_object": ("process", "eprocess"),
+    "thread_object": ("thread", "ethread", "kthread"),
+    "file_object": ("file",),
+    "driver_object": ("driver",),
+    "device_object": ("device",),
+    "registry_key": ("registry", "key", "hive"),
+    "section_object": ("section",),
+    "module_image": ("module", "image"),
+}
 
 
 @dataclass
@@ -351,6 +361,10 @@ def _score_candidates(
             score += 0.08
         if candidate.phase_hints:
             score += min(0.12, max(candidate.phase_hints.values()) * 0.16)
+        topic_adjustment, topic_reason = _topic_relevance_adjustment(candidate, ontology)
+        if topic_adjustment:
+            score += topic_adjustment
+            candidate.why_selected.add(topic_reason)
         score += min(0.10, candidate.bridge_degree * 0.025)
         if candidate.buffer_contract_count > 0:
             score += 0.02
@@ -761,6 +775,58 @@ def _prefix_score(prefix: str) -> float:
         "Mm": 0.05,
         "Se": 0.05,
     }.get(prefix, 0.0)
+
+
+def _topic_relevance_adjustment(candidate: Candidate, ontology: dict[str, Any]) -> tuple[float, str]:
+    if candidate.discovery_kinds.intersection({"exact_name", "seed_name_text"}):
+        return 0.0, ""
+    target_tokens = set(_target_topic_tokens(ontology))
+    conflicting_tokens = set(_conflicting_topic_tokens(ontology))
+    if not target_tokens or not conflicting_tokens:
+        return 0.0, ""
+    name_tokens = set(_identifier_tokens(candidate.name))
+    if not name_tokens:
+        return 0.0, ""
+    if name_tokens.intersection(target_tokens):
+        return 0.0, ""
+    conflicts = sorted(name_tokens.intersection(conflicting_tokens))
+    if not conflicts:
+        return 0.0, ""
+    return -0.24, "topic relevance penalty: conflicting name token(s) %s" % ", ".join(conflicts)
+
+
+def _target_topic_tokens(ontology: dict[str, Any]) -> tuple[str, ...]:
+    topic = str(ontology.get("topic", "") or "")
+    if topic in OBJECT_TOPIC_TOKEN_GROUPS:
+        return OBJECT_TOPIC_TOKEN_GROUPS[topic]
+    tokens = []
+    for value in [topic] + _strings(ontology.get("labels")):
+        tokens.extend(_identifier_tokens(value))
+    return tuple(item for item in _unique(tokens) if item not in {"object", "lifecycle"})
+
+
+def _conflicting_topic_tokens(ontology: dict[str, Any]) -> tuple[str, ...]:
+    target = set(_target_topic_tokens(ontology))
+    tokens = []
+    for group in OBJECT_TOPIC_TOKEN_GROUPS.values():
+        tokens.extend(group)
+    return tuple(item for item in _unique(tokens) if item not in target)
+
+
+def _identifier_tokens(value: str) -> list[str]:
+    parts = []
+    for chunk in re.findall(r"[A-Za-z0-9]+", str(value or "")):
+        parts.extend(
+            item.lower()
+            for item in re.findall(r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|[0-9]+", chunk)
+            if item
+        )
+    expanded = []
+    for part in parts:
+        expanded.append(part)
+        if len(part) > 3 and part.endswith("s"):
+            expanded.append(part[:-1])
+    return expanded
 
 
 def _term_matches_candidate(candidate: Candidate, term: str) -> bool:

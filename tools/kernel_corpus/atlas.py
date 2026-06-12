@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -360,7 +361,7 @@ def build_subsystem_page(
 ) -> dict[str, Any]:
     candidates = _collect_candidates(pack_root, spec, limit=limit)
     selected = sorted(candidates.values(), key=_candidate_sort_key)[:limit]
-    hubs = _collect_hubs(pack_root, selected)
+    hubs = _collect_hubs(pack_root, selected, spec)
     lifecycle_packs = _find_lifecycle_packs(status, spec.lifecycle_topics)
     gaps = _gaps_for_page(status, spec, selected, hubs, lifecycle_packs)
     markdown = _render_page(
@@ -481,8 +482,9 @@ def _score_candidate(candidate: dict[str, Any], spec: SubsystemSpec) -> float:
     return max(0.01, min(0.99, score))
 
 
-def _collect_hubs(pack_root: str | Path, functions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _collect_hubs(pack_root: str | Path, functions: list[dict[str, Any]], spec: SubsystemSpec) -> list[dict[str, Any]]:
     hubs: dict[str, dict[str, Any]] = {}
+    selected_eas = {str(function.get("ea", "")) for function in functions if str(function.get("ea", ""))}
     for root in functions[:HUB_ROOT_LIMIT]:
         try:
             neighbors = get_neighbors(pack_root, root["ea"], direction="both", depth=1, limit=40)
@@ -525,7 +527,58 @@ def _collect_hubs(pack_root: str | Path, functions: list[dict[str, Any]]) -> lis
     )
     for hub in result:
         hub["roots"] = sorted(hub["roots"])
-    return result[:10]
+    filtered = [
+        hub
+        for hub in result
+        if not _is_noisy_generic_hub(hub) and _hub_is_relevant(hub, spec, selected_eas)
+    ]
+    return filtered[:10]
+
+
+def _is_noisy_generic_hub(hub: dict[str, Any]) -> bool:
+    name = str(hub.get("name", "") or "")
+    lowered = name.lower()
+    if re.match(r"^mem(set|cpy|move|cmp|chr)(?:_\\d+)?$", lowered):
+        return True
+    if lowered.startswith(("_security_", "__security_", "__guard_")):
+        return True
+    if lowered.startswith("feature_") or "__private_isenabled" in lowered:
+        return True
+    if lowered in {
+        "kebugcheck",
+        "kebugcheckex",
+        "exfreepool",
+        "exfreepool2",
+        "exfreepoolwithtag",
+        "exallocatepool",
+        "exallocatepool2",
+        "exallocatepoolwithtag",
+        "exallocatepoolwithtagpriority",
+    }:
+        return True
+    if re.match(r"^dif[A-Z].*Wrapper$", name, flags=re.IGNORECASE):
+        return True
+    return False
+
+
+def _hub_is_relevant(hub: dict[str, Any], spec: SubsystemSpec, selected_eas: set[str]) -> bool:
+    ea = str(hub.get("ea", ""))
+    name = str(hub.get("name", ""))
+    if ea in selected_eas and _hub_name_matches_spec(name, spec):
+        return True
+    return _hub_name_matches_spec(name, spec)
+
+
+def _hub_name_matches_spec(name: str, spec: SubsystemSpec) -> bool:
+    if any(name.lower() == item.lower() or item.lower() in name.lower() for item in spec.priority_names):
+        return True
+    if any(_text_term_match(name.lower(), term) for term in spec.query_terms):
+        return True
+    if any(_text_term_match(name.lower(), term) for term in spec.import_terms + spec.string_terms):
+        return True
+    if spec.name_regex and re.search(spec.name_regex, name):
+        return True
+    return False
 
 
 def _find_lifecycle_packs(status: dict[str, Any], topics: tuple[str, ...]) -> list[dict[str, Any]]:

@@ -131,7 +131,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The initial implementation is complete through Phase 11:
+The initial implementation is complete through Phase 12:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -153,6 +153,10 @@ The initial implementation is complete through Phase 11:
 11. The pack freshness validator checks manifest, SQLite, source-index hash,
     function counts, lifecycle evidence packs, and atlas metadata before an
     operator or agent trusts derived artifacts.
+12. Real ntoskrnl review tuned lifecycle and atlas ranking: cross-topic
+    lifecycle candidates are penalized unless exact evidence keeps them in
+    scope, and atlas hubs suppress generic helpers or subsystem-irrelevant
+    neighbors.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -387,6 +391,11 @@ Algorithm:
 The first version can be heuristic. It does not need perfect whole-kernel
 understanding. It needs to be evidence-preserving, explainable, and easy to
 correct.
+
+Selection should preserve exact seed hits, but broad-term and graph-neighbor
+candidates are penalized when their name clearly belongs to another lifecycle
+topic, such as thread-only helpers inside a process-object trace. This keeps
+generic object-manager seeds available while reducing cross-object leakage.
 
 ## Evidence Pack Schema
 
@@ -806,6 +815,29 @@ Acceptance:
 - Tests cover fresh, stale, missing, and partial states without requiring the
   real ntoskrnl corpus.
 
+### Phase 12: Lifecycle and atlas quality tuning
+
+Deliver:
+
+```text
+tools/kernel_corpus/lifecycle.py
+tools/kernel_corpus/atlas.py
+tests/test_kernel_corpus_lifecycle.py
+tests/test_kernel_corpus_atlas.py
+```
+
+Acceptance:
+
+- Regenerate process and thread lifecycle evidence packs on the real ntoskrnl
+  smoke pack.
+- Regenerate subsystem atlas pages on the real ntoskrnl smoke pack.
+- Penalize cross-topic lifecycle graph neighbors without hardcoding ntoskrnl
+  names.
+- Suppress generic/noisy atlas hubs such as intrinsic memory helpers,
+  validation wrappers, feature-flag probes, and subsystem-irrelevant
+  neighbors.
+- Add fixture regression tests for every heuristic change.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -821,7 +853,8 @@ Test layers:
 6. Answer harness tests for prompt generation and citation warnings.
 7. Pack freshness validator tests for fresh, stale, missing, partial, and
    derived-artifact states.
-8. Optional integration smoke against the real ntoskrnl pack when present.
+8. Lifecycle/atlas quality tests for cross-topic penalties and hub filtering.
+9. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -835,6 +868,8 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Keep lifecycle heuristics reviewable as JSON ontology plus Python scoring.
 - Run pack freshness validation before reusing old packs, evidence packs, or
   atlas pages.
+- Treat atlas hubs as relevance-filtered retrieval hints; generic helpers are
+  intentionally suppressed from hub lists.
 - Treat answer harness validation as citation lint, not final factual proof.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
