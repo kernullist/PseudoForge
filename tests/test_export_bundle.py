@@ -94,6 +94,35 @@ class ExportBundleTests(unittest.TestCase):
             self.assertTrue(summary_path.exists())
             self.assertFalse((Path(temp_dir) / "ExportBundleSample.summary.json").exists())
 
+    def test_write_export_bundle_limits_long_artifact_stems(self) -> None:
+        long_name = (
+            "?BTreeRedistribute@?$B_TREE@T_SM_PAGE_KEY@@USMKM_FRONTEND_ENTRY@?"
+            "$SMKM_STORE_MGR@USM_TRAITS@@@@$0BAAA@UB_TREE_DUMMY_NODE_POOL@@"
+            "U?$B_TREE_KEY_COMPARATOR@T_SM_PAGE_KEY@@@@@@SAPEAUNODE@?"
+            "$B_TREE_HEADER@T_SM_PAGE_KEY@@USMKM_FRONTEND_ENTRY@?"
+            "$SMKM_STORE_MGR@USM_TRAITS@@@@@@PEAU1@PEAUSEARCH_RESULT@1@@Z"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            capture = capture_from_pseudocode(
+                SAMPLE,
+                name=long_name,
+                ea=0x140291E88,
+                source_path="sample.bin",
+            )
+            plan = build_clean_plan(capture)
+
+            artifacts = write_export_bundle(temp_dir, capture, plan, entrypoint="ida_interactive")
+
+            cleaned_path = Path(artifacts["cleaned_pseudocode"])
+            artifact_stem = cleaned_path.name[: -len(".cleaned.cpp")]
+            self.assertLessEqual(len(artifact_stem), 96)
+            self.assertRegex(artifact_stem, r"_[0-9a-f]{12}$")
+            for path in artifacts.values():
+                self.assertTrue(Path(path).exists(), path)
+
+            summary = json.loads(Path(artifacts["summary"]).read_text(encoding="utf-8"))
+            self.assertEqual(long_name, summary["function"])
+
     def test_write_export_bundle_includes_rule_diagnostics_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             capture = capture_from_pseudocode(SAMPLE, ea=0x140001000, source_path="sample.bin")

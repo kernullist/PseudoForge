@@ -166,10 +166,26 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-seconds", type=int, default=0, help="Maximum wall time. 0 means unlimited.")
     parser.add_argument("--metadata-max-strings", type=int, default=20000, help="Maximum strings to store in corpus metadata.")
     parser.add_argument("--metadata-max-names", type=int, default=20000, help="Maximum named addresses to store in corpus metadata.")
+    parser.add_argument(
+        "--ea",
+        action="append",
+        default=[],
+        help="Only process this function EA. Can be repeated; accepts hex or decimal.",
+    )
+    parser.add_argument(
+        "--ea-file",
+        default="",
+        help="Only process function EAs listed in this text file. Whitespace, comma, and semicolon separators are accepted.",
+    )
     parser.add_argument("--start-ea", default="", help="First function EA, inclusive.")
     parser.add_argument("--end-ea", default="", help="Last function EA, inclusive.")
     parser.add_argument("--name-regex", default="", help="Only process function names matching this regex.")
     parser.add_argument("--resume", action="store_true", help="Skip EAs already present in the aggregate .forge file.")
+    parser.add_argument(
+        "--upsert-forge",
+        action="store_true",
+        help="Update matching EAs in the existing aggregate .forge instead of overwriting it.",
+    )
     parser.add_argument("--skip-lib-thunk", action="store_true", help="Skip library and thunk functions.")
     parser.add_argument("--stop-on-error", action="store_true", help="Stop after the first failed function.")
     parser.add_argument("--no-pdb", action="store_true", help="Pass -Opdb:off to IDA.")
@@ -207,6 +223,8 @@ def _prepare_run(args: argparse.Namespace) -> IdaCliRun:
         raise RuntimeError("IDB path not found: %s" % idb_path)
     if args.no_pdb and (args.pdb_path or args.symbol_path):
         raise RuntimeError("--no-pdb cannot be used together with --pdb-path or --symbol-path")
+    if args.resume and args.upsert_forge:
+        raise RuntimeError("--resume cannot be used together with --upsert-forge")
 
     batch_script = ROOT / "tools" / "pseudoforge_ida_batch.py"
     if not batch_script.exists():
@@ -303,11 +321,16 @@ def _build_batch_args(
     _append_int_option(result, "--max-seconds", args.max_seconds)
     _append_int_option(result, "--metadata-max-strings", args.metadata_max_strings)
     _append_int_option(result, "--metadata-max-names", args.metadata_max_names)
+    for ea in args.ea:
+        _append_option(result, "--ea", ea)
+    _append_option(result, "--ea-file", args.ea_file)
     _append_option(result, "--start-ea", args.start_ea)
     _append_option(result, "--end-ea", args.end_ea)
     _append_option(result, "--name-regex", args.name_regex)
     if args.resume:
         result.append("--resume")
+    elif args.upsert_forge:
+        result.append("--upsert-forge")
     else:
         result.append("--overwrite-forge")
     if args.skip_lib_thunk:

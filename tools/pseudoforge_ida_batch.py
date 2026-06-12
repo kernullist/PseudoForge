@@ -24,7 +24,7 @@ for module_name in list(sys.modules):
 
 from ida_pseudoforge.config import LlmConfig, get_provider_api_key, load_config
 from ida_pseudoforge.core.capture import capture_from_pseudocode
-from ida_pseudoforge.core.export_bundle import write_export_bundle
+from ida_pseudoforge.core.export_bundle import safe_artifact_stem, write_export_bundle
 from ida_pseudoforge.core.forge_store import (
     parse_forge_function_sections,
     render_forge_function_section,
@@ -262,6 +262,17 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--cancel-file", default="", help="Stop before the next function when this file exists.")
     parser.add_argument("--max-functions", type=int, default=0, help="Maximum functions to process. 0 means all.")
     parser.add_argument("--max-seconds", type=int, default=0, help="Maximum wall time. 0 means unlimited.")
+    parser.add_argument(
+        "--ea",
+        action="append",
+        default=[],
+        help="Only process this function EA. Can be repeated; accepts hex or decimal.",
+    )
+    parser.add_argument(
+        "--ea-file",
+        default="",
+        help="Only process function EAs listed in this text file. Whitespace, comma, and semicolon separators are accepted.",
+    )
     parser.add_argument("--start-ea", default="", help="First function EA, inclusive.")
     parser.add_argument("--end-ea", default="", help="Last function EA, inclusive.")
     parser.add_argument("--name-regex", default="", help="Only process function names matching this regex.")
@@ -564,8 +575,17 @@ def _iter_function_eas(args: argparse.Namespace, skip_eas: set[int]) -> Iterable
     start_ea = _parse_ea(args.start_ea)
     end_ea = _parse_ea(args.end_ea)
     name_re = re.compile(args.name_regex) if args.name_regex else None
-    for ea in idautils.Functions():
+    requested_eas = _requested_function_eas(args)
+    function_eas = requested_eas if requested_eas else [int(ea) for ea in idautils.Functions()]
+    seen: set[int] = set()
+    for ea in function_eas:
         ea = int(ea)
+        func = ida_funcs.get_func(ea) if ida_funcs is not None else None
+        if func is not None:
+            ea = int(getattr(func, "start_ea", ea))
+        if ea in seen:
+            continue
+        seen.add(ea)
         if ea in skip_eas:
             continue
         if start_ea is not None and ea < start_ea:
@@ -578,6 +598,31 @@ def _iter_function_eas(args: argparse.Namespace, skip_eas: set[int]) -> Iterable
         if args.skip_lib_thunk and _is_lib_or_thunk(ea):
             continue
         yield ea
+
+
+def _requested_function_eas(args: argparse.Namespace) -> list[int]:
+    values: list[int] = []
+    for item in getattr(args, "ea", []) or []:
+        values.extend(_parse_ea_tokens(str(item)))
+    ea_file = str(getattr(args, "ea_file", "") or "")
+    if ea_file:
+        try:
+            text = Path(ea_file).read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise RuntimeError("EA file could not be read: %s" % exc) from exc
+        values.extend(_parse_ea_tokens(text))
+    return values
+
+
+def _parse_ea_tokens(text: str) -> list[int]:
+    values: list[int] = []
+    for line in str(text or "").splitlines():
+        line = line.split("#", 1)[0]
+        for token in re.split(r"[\s,;]+", line.strip()):
+            if not token:
+                continue
+            values.append(int(token, 0))
+    return values
 
 
 def _parse_ea(value: str) -> int | None:
@@ -712,6 +757,7 @@ def _write_export_artifacts(
         summary_suffix="ida-batch-summary",
         cleaned_text=cleaned_text.rstrip() + "\n",
         extra_summary=extra_summary,
+        file_stem="function",
     )
     return {
         "mode": "ida_batch_export",
@@ -1237,11 +1283,11 @@ def _refresh_compare_diff(compare_dir: Path, cleaned_path: Path, context_lines: 
 
 
 def _function_file_stem(ea: int, name: str) -> str:
-    safe_name = re.sub(r"[^A-Za-z0-9_.@$-]+", "_", name or "function").strip("._")
-    if not safe_name:
-        safe_name = "function"
-    if len(safe_name) > 96:
-        safe_name = safe_name[:96]
+    safe_name = safe_artifact_stem(
+        re.sub(r"[^A-Za-z0-9_.@$-]+", "_", name or "function"),
+        max_length=64,
+        digest_source="%X:%s" % (ea, name or "function"),
+    )
     return "%016X_%s" % (ea, safe_name)
 
 

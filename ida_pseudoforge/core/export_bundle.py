@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,7 +12,6 @@ from ida_pseudoforge.core.buffer_contracts import (
 )
 from ida_pseudoforge.core.plan_schema import CleanPlan, FunctionCapture
 from ida_pseudoforge.core.render import (
-    _safe_file_stem,
     render_cleaned_pseudocode,
     render_flow_report,
     render_switch_outline,
@@ -34,10 +34,14 @@ def write_export_bundle(
     summary_suffix: str = "summary",
     cleaned_text: str | None = None,
     extra_summary: dict[str, object] | None = None,
+    file_stem: str | None = None,
 ) -> dict[str, str]:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    safe_name = _safe_file_stem(capture.name or "function")
+    safe_name = safe_artifact_stem(
+        file_stem or capture.name or "function",
+        digest_source="%X:%s" % (capture.ea, capture.name or file_stem or "function"),
+    )
 
     cleaned_path = output_path / f"{safe_name}.cleaned.cpp"
     switch_outline_path = output_path / f"{safe_name}.switch-outline.cpp"
@@ -50,7 +54,7 @@ def write_export_bundle(
     raw_path = output_path / f"{safe_name}.raw.cpp"
     warnings_path = output_path / f"{safe_name}.warnings.json"
     diff_path = output_path / f"{safe_name}.raw-vs-cleaned.diff"
-    summary_path = output_path / f"{safe_name}.{_safe_file_stem(summary_suffix or 'summary')}.json"
+    summary_path = output_path / f"{safe_name}.{safe_artifact_stem(summary_suffix or 'summary', 48)}.json"
 
     if cleaned_text is None:
         cleaned_text = render_cleaned_pseudocode(capture, plan)
@@ -104,6 +108,23 @@ def write_export_bundle(
         encoding="utf-8",
     )
     return artifacts
+
+
+def safe_artifact_stem(name: str, max_length: int = 96, digest_source: str | None = None) -> str:
+    cleaned = "".join(
+        char if char.isascii() and (char.isalnum() or char in "._-") else "_"
+        for char in str(name or "function")
+    )
+    cleaned = cleaned.strip("._") or "function"
+    limit = max(16, int(max_length or 0))
+    if len(cleaned) <= limit:
+        return cleaned
+    digest_input = str(digest_source if digest_source is not None else name)
+    digest = hashlib.sha256(digest_input.encode("utf-8", errors="replace")).hexdigest()[:12]
+    suffix = "_" + digest
+    prefix_length = max(1, limit - len(suffix))
+    prefix = cleaned[:prefix_length].rstrip("._-") or "function"
+    return prefix + suffix
 
 
 def _combined_export_warnings(plan: CleanPlan) -> list[str]:

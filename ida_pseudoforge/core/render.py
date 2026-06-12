@@ -161,6 +161,7 @@ def write_export_bundle(
     plan: CleanPlan,
     entrypoint: str = "export_bundle",
     summary_suffix: str = "summary",
+    file_stem: str | None = None,
 ) -> dict[str, str]:
     from ida_pseudoforge.core.export_bundle import write_export_bundle as _write_export_bundle
 
@@ -170,6 +171,7 @@ def write_export_bundle(
         plan,
         entrypoint=entrypoint,
         summary_suffix=summary_suffix,
+        file_stem=file_stem,
     )
 
 

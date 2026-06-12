@@ -24,6 +24,8 @@ param(
     [string]$LlmModel = "",
     [string]$LlmCommand = "",
     [int]$LlmTimeout = 0,
+    [string[]]$Ea = @(),
+    [string]$EaFile = "",
     [string]$StartEa = "",
     [string]$EndEa = "",
     [string]$NameRegex = "",
@@ -138,6 +140,14 @@ if ($LlmCommand) { Add-Option -Args $scriptArgs -Name "--llm-command" -Value $Ll
 if ($LlmTimeout -gt 0) { Add-Option -Args $scriptArgs -Name "--llm-timeout" -Value ([string]$LlmTimeout) }
 if ($MaxFunctions -gt 0) { Add-Option -Args $scriptArgs -Name "--max-functions" -Value ([string]$MaxFunctions) }
 if ($MaxSeconds -gt 0) { Add-Option -Args $scriptArgs -Name "--max-seconds" -Value ([string]$MaxSeconds) }
+foreach ($item in $Ea)
+{
+    if ($item)
+    {
+        Add-Option -Args $scriptArgs -Name "--ea" -Value $item
+    }
+}
+if ($EaFile) { Add-Option -Args $scriptArgs -Name "--ea-file" -Value $EaFile }
 if ($StartEa) { Add-Option -Args $scriptArgs -Name "--start-ea" -Value $StartEa }
 if ($EndEa) { Add-Option -Args $scriptArgs -Name "--end-ea" -Value $EndEa }
 if ($NameRegex) { Add-Option -Args $scriptArgs -Name "--name-regex" -Value $NameRegex }

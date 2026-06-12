@@ -101,6 +101,59 @@ class IdaBatchTests(unittest.TestCase):
         self.assertIn("imports", metadata)
         self.assertIn("segments", metadata)
 
+    def test_ida_batch_exact_ea_file_limits_selection(self) -> None:
+        class FakeFunc:
+            def __init__(self, start_ea: int, flags: int = 0) -> None:
+                self.start_ea = start_ea
+                self.flags = flags
+
+        class FakeIdaFuncs:
+            @staticmethod
+            def get_func(ea):
+                if ea == 0x140200010:
+                    return FakeFunc(0x140200008)
+                return FakeFunc(int(ea))
+
+            @staticmethod
+            def get_func_name(ea):
+                names = {
+                    0x140200008: "LongTemplateSymbol",
+                    0x140291E88: "BTreeRedistribute",
+                }
+                return names.get(int(ea), "")
+
+        class FakeIdaUtils:
+            @staticmethod
+            def Functions():
+                raise AssertionError("explicit EA selection should not enumerate all functions")
+
+        old_ida_funcs = ida_batch_module.ida_funcs
+        old_idautils = ida_batch_module.idautils
+        ida_batch_module.ida_funcs = FakeIdaFuncs
+        ida_batch_module.idautils = FakeIdaUtils
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                ea_file = Path(temp_dir) / "failed-eas.txt"
+                ea_file.write_text(
+                    "0x140200010 # normalizes to function start\n0x140291E88, 0x140291E88\n",
+                    encoding="utf-8",
+                )
+                args = argparse.Namespace(
+                    ea=[],
+                    ea_file=str(ea_file),
+                    start_ea="",
+                    end_ea="",
+                    name_regex="",
+                    skip_lib_thunk=False,
+                )
+
+                selected = list(ida_batch_module._iter_function_eas(args, skip_eas={0x140291E88}))
+        finally:
+            ida_batch_module.ida_funcs = old_ida_funcs
+            ida_batch_module.idautils = old_idautils
+
+        self.assertEqual([0x140200008], selected)
+
     def test_ida_batch_optional_llm_plan_records_ok_status(self) -> None:
         class FakeProvider:
             def suggest_renames(self, capture):
@@ -343,6 +396,53 @@ __int64 __fastcall LlmBatchSample(int a1)
             self.assertIn("BatchExportEdited", cleaned_text)
             self.assertEqual(summary["llm_status"], "ok")
             self.assertEqual(summary["llm_provider"], "ollama")
+
+    def test_ida_batch_export_uses_short_paths_for_long_mangled_symbols(self) -> None:
+        long_name = (
+            "??$Write@U?$_tlgWrapperByVal@$07@@U?$_tlgWrapperByVal@$03@@"
+            "U2@U?$_tlgWrapperByVal@$00@@U?$_tlgWrapperByRef@$0BA@@@"
+            "U_tlgWrapperBinary@@U1@U3@U5@U1@U3@U5@U1@U3@U5@U1@"
+            "U3@U5@U1@U3@U5@U1@U3@U5@U1@U3@U5@U1@U3@U5@U2@U3@@"
+            "?$_tlgWriteTemplate@$$A6AJPEBU_tlgProvider_t@@PEBXPEBU_GUID@@"
+            "2IPEAU_EVENT_DATA_DESCRIPTOR@@@Z$1?_tlgWriteTransfer_EtwWriteTransfer@@"
+            "YAJ0122I3@ZPEBU2@PEBU2@@@SAJPEBU_tlgProvider_t@@PEBXPEBU_GUID@@"
+            "2AEBU?$_tlgWrapperByVal@$07@@AEBU?$_tlgWrapperByVal@$03@@"
+            "4AEBU?$_tlgWrapperByVal@$00@@AEBU?$_tlgWrapperByRef@$0BA@@@"
+            "AEBU_tlgWrapperBinary@@35735735735735735735735745@Z"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            capture = capture_from_pseudocode(
+                BATCH_BOOLEAN_SAMPLE,
+                name=long_name,
+                ea=0x140200008,
+            )
+            plan = build_clean_plan(capture)
+            cleaned = render_cleaned_pseudocode(capture, plan)
+
+            export = _write_export_artifacts(
+                Path(temp_dir),
+                capture,
+                plan,
+                cleaned,
+                aliases={},
+                llm_status="ok",
+                llm_error="",
+                llm_error_class="",
+                llm_error_summary="",
+                llm_info={"enabled": False},
+            )
+
+            function_dir = Path(export["directory"])
+            self.assertTrue(function_dir.name.startswith("0000000140200008_"))
+            self.assertLessEqual(len(function_dir.name), 81)
+            self.assertEqual("function.cleaned.cpp", Path(export["artifacts"]["cleaned_pseudocode"]).name)
+            self.assertEqual("function.ida-batch-summary.json", Path(export["artifacts"]["summary"]).name)
+            for path in export["artifacts"].values():
+                self.assertTrue(Path(path).exists(), path)
+                self.assertLess(len(str(path)), 240)
+
+            summary = json.loads(Path(export["artifacts"]["summary"]).read_text(encoding="utf-8"))
+            self.assertEqual(long_name, summary["function"])
 
     def test_ida_batch_compare_file_stem_is_windows_safe(self) -> None:
         stem = _function_file_stem(0x1234, "bad:name<with>|chars?and spaces")

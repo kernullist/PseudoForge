@@ -81,6 +81,68 @@ class PseudoForgeIdaCliTests(unittest.TestCase):
             self.assertIn("--llm-renames-auto", run.batch_args)
             self.assertNotIn("--require-configured-llm", run.batch_args)
 
+    def test_ida_cli_upsert_forge_does_not_overwrite_existing_aggregate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            ida_path = temp_path / "ida.exe"
+            idb_path = temp_path / "sample.idb"
+            output_dir = temp_path / "out"
+            ida_path.write_text("", encoding="utf-8")
+            idb_path.write_text("", encoding="utf-8")
+            args = pseudoforge_ida_cli._build_parser().parse_args(
+                [str(ida_path), str(idb_path), str(output_dir), "--upsert-forge"]
+            )
+
+            run = pseudoforge_ida_cli._prepare_run(args)
+
+            self.assertIn("--upsert-forge", run.batch_args)
+            self.assertNotIn("--overwrite-forge", run.batch_args)
+
+    def test_ida_cli_rejects_resume_with_upsert_forge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            ida_path = temp_path / "ida.exe"
+            idb_path = temp_path / "sample.idb"
+            output_dir = temp_path / "out"
+            ida_path.write_text("", encoding="utf-8")
+            idb_path.write_text("", encoding="utf-8")
+            args = pseudoforge_ida_cli._build_parser().parse_args(
+                [str(ida_path), str(idb_path), str(output_dir), "--resume", "--upsert-forge"]
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "--resume"):
+                pseudoforge_ida_cli._prepare_run(args)
+
+    def test_ida_cli_forwards_exact_ea_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            ida_path = temp_path / "ida64.exe"
+            idb_path = temp_path / "driver.sys.i64"
+            output_dir = temp_path / "out"
+            ea_file = temp_path / "failed-eas.txt"
+            ida_path.write_text("", encoding="utf-8")
+            idb_path.write_text("", encoding="utf-8")
+            ea_file.write_text("0x140200008\n", encoding="utf-8")
+            args = pseudoforge_ida_cli._build_parser().parse_args(
+                [
+                    str(ida_path),
+                    str(idb_path),
+                    str(output_dir),
+                    "--ea",
+                    "0x140291E88",
+                    "--ea-file",
+                    str(ea_file),
+                    "--no-pdb",
+                ]
+            )
+
+            run = pseudoforge_ida_cli._prepare_run(args)
+
+            self.assertIn("--ea", run.batch_args)
+            self.assertIn("0x140291E88", run.batch_args)
+            self.assertIn("--ea-file", run.batch_args)
+            self.assertIn(str(ea_file), run.batch_args)
+
     def test_ida_cli_uses_explicit_cancel_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
