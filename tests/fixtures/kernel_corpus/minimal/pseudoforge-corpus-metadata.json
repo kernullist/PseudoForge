@@ -1,0 +1,39 @@
+{
+  "schema": "pseudoforge_corpus_metadata_v1",
+  "idb_path": "minimal.i64",
+  "target_path": "minimal.sys",
+  "image_base": "0x140000000",
+  "processor": "metapc",
+  "segments": [
+    {
+      "name": ".text",
+      "start_ea": "0x140001000",
+      "end_ea": "0x140010000"
+    }
+  ],
+  "imports": [
+    {
+      "ea": "0x180001000",
+      "module": "ntoskrnl.exe",
+      "name": "ExAllocatePool2"
+    },
+    {
+      "ea": "0x180002000",
+      "module": "ntoskrnl.exe",
+      "name": "ObDereferenceObject"
+    }
+  ],
+  "exports": [
+    {
+      "ea": "0x140001000",
+      "name": "NtCreateUserProcess",
+      "ordinal": 1
+    }
+  ],
+  "strings": [
+    {
+      "ea": "0x140020000",
+      "value": "ProcessDelete"
+    }
+  ]
+}

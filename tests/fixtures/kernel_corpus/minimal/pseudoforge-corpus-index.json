@@ -1,0 +1,170 @@
+{
+  "schema": "pseudoforge_corpus_index_v1",
+  "pseudoforge_version": "0.1.2",
+  "generated_at": "2026-06-12T00:00:00+00:00",
+  "output_dir": "tests/fixtures/kernel_corpus/minimal",
+  "functions_dir": "tests/fixtures/kernel_corpus/minimal/functions",
+  "metadata_path": "tests/fixtures/kernel_corpus/minimal/pseudoforge-corpus-metadata.json",
+  "report_path": "",
+  "index_path": "tests/fixtures/kernel_corpus/minimal/pseudoforge-corpus-index.json",
+  "overview_path": "tests/fixtures/kernel_corpus/minimal/pseudoforge-corpus-overview.md",
+  "overview": {
+    "functions": 3,
+    "imports": 2,
+    "exports": 1,
+    "strings": 1,
+    "segments": 1,
+    "warnings": 1,
+    "buffer_contracts": 0,
+    "llm_status_counts": {
+      "ok": 3
+    },
+    "top_clusters": [
+      {
+        "tag": "process_thread",
+        "count": 3
+      }
+    ],
+    "report_status_counts": {
+      "ok": 3
+    }
+  },
+  "clusters": [
+    {
+      "tag": "process_thread",
+      "count": 3,
+      "functions": [
+        {
+          "ea": "0x140001000",
+          "name": "NtCreateUserProcess",
+          "summary_path": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.ida-batch-summary.json"
+        },
+        {
+          "ea": "0x140002000",
+          "name": "PspAllocateProcess",
+          "summary_path": "tests/fixtures/kernel_corpus/minimal/functions/0000000140002000_PspAllocateProcess/function.ida-batch-summary.json"
+        },
+        {
+          "ea": "0x140003000",
+          "name": "PspProcessDelete",
+          "summary_path": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.ida-batch-summary.json"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "ea": "0x140001000",
+      "name": "NtCreateUserProcess",
+      "directory": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess",
+      "summary_path": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.ida-batch-summary.json",
+      "artifacts": {
+        "cleaned_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.cleaned.cpp",
+        "raw_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.raw.cpp",
+        "summary": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.ida-batch-summary.json"
+      },
+      "tags": ["process_thread"],
+      "terms": ["create", "process", "ntcreateuserprocess"],
+      "source_path": "minimal.i64",
+      "mode": "ida_batch_export",
+      "counts": {
+        "warnings": 0,
+        "buffer_contracts": 0
+      },
+      "llm_status": "ok",
+      "llm_provider": "none",
+      "callee_eas": ["0x140002000"],
+      "callee_names": ["PspAllocateProcess"],
+      "caller_eas": [],
+      "caller_names": [],
+      "imports_called": [],
+      "strings_referenced": [],
+      "interesting_lines": ["return PspAllocateProcess(...);"],
+      "cleaned_excerpt": "NTSTATUS NtCreateUserProcess(...)"
+    },
+    {
+      "ea": "0x140002000",
+      "name": "PspAllocateProcess",
+      "directory": "tests/fixtures/kernel_corpus/minimal/functions/0000000140002000_PspAllocateProcess",
+      "summary_path": "tests/fixtures/kernel_corpus/minimal/functions/0000000140002000_PspAllocateProcess/function.ida-batch-summary.json",
+      "artifacts": {
+        "cleaned_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140002000_PspAllocateProcess/function.cleaned.cpp",
+        "raw_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140002000_PspAllocateProcess/function.raw.cpp",
+        "summary": "tests/fixtures/kernel_corpus/minimal/functions/0000000140002000_PspAllocateProcess/function.ida-batch-summary.json"
+      },
+      "tags": ["memory", "process_thread"],
+      "terms": ["allocate", "process", "pspallocateprocess"],
+      "source_path": "minimal.i64",
+      "mode": "ida_batch_export",
+      "counts": {
+        "warnings": 1,
+        "buffer_contracts": 0
+      },
+      "llm_status": "ok",
+      "llm_provider": "none",
+      "callee_eas": [],
+      "callee_names": [],
+      "caller_eas": ["0x140001000"],
+      "caller_names": ["NtCreateUserProcess"],
+      "imports_called": [
+        {
+          "ea": "0x180001000",
+          "module": "ntoskrnl.exe",
+          "name": "ExAllocatePool2"
+        }
+      ],
+      "strings_referenced": [],
+      "interesting_lines": ["process = ExAllocatePool2(...);"],
+      "cleaned_excerpt": "EPROCESS *PspAllocateProcess(...)"
+    },
+    {
+      "ea": "0x140003000",
+      "name": "PspProcessDelete",
+      "directory": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete",
+      "summary_path": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.ida-batch-summary.json",
+      "artifacts": {
+        "cleaned_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.cleaned.cpp",
+        "raw_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.raw.cpp",
+        "summary": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.ida-batch-summary.json"
+      },
+      "tags": ["process_thread"],
+      "terms": ["delete", "process", "pspprocessdelete"],
+      "source_path": "minimal.i64",
+      "mode": "ida_batch_export",
+      "counts": {
+        "warnings": 0,
+        "buffer_contracts": 0
+      },
+      "llm_status": "ok",
+      "llm_provider": "none",
+      "callee_eas": [],
+      "callee_names": [],
+      "caller_eas": [],
+      "caller_names": [],
+      "imports_called": [
+        {
+          "ea": "0x180002000",
+          "module": "ntoskrnl.exe",
+          "name": "ObDereferenceObject"
+        }
+      ],
+      "strings_referenced": [
+        {
+          "ea": "0x140020000",
+          "value": "ProcessDelete"
+        }
+      ],
+      "interesting_lines": ["ObDereferenceObject(process);"],
+      "cleaned_excerpt": "void PspProcessDelete(...)"
+    }
+  ],
+  "metadata": {
+    "schema": "pseudoforge_corpus_metadata_v1",
+    "target_path": "minimal.i64"
+  },
+  "report_summary": {
+    "status_counts": {
+      "ok": 3
+    }
+  }
+}

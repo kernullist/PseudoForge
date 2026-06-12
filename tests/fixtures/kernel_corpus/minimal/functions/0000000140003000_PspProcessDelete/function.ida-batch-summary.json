@@ -1,0 +1,15 @@
+{
+  "function": "PspProcessDelete",
+  "function_ea": "0x140003000",
+  "mode": "ida_batch_export",
+  "source_path": "minimal.i64",
+  "llm_status": "ok",
+  "llm_provider": "none",
+  "warnings": 0,
+  "buffer_contracts": 0,
+  "artifacts": {
+    "cleaned_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.cleaned.cpp",
+    "raw_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.raw.cpp",
+    "summary": "tests/fixtures/kernel_corpus/minimal/functions/0000000140003000_PspProcessDelete/function.ida-batch-summary.json"
+  }
+}
