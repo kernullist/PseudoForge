@@ -33,6 +33,7 @@ tools/
     lifecycle.py
     mcp_server.py
     paths.py
+    perf_profile.py
     query.py
     schema.py
     store.py
@@ -132,7 +133,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The initial implementation is complete through Phase 13:
+The initial implementation is complete through Phase 14:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -161,6 +162,9 @@ The initial implementation is complete through Phase 13:
 13. Install wiring emits copy-ready MCP config snippets and dry-run-first skill
     install, update, and uninstall plans without mixing the tooling into the
     IDA plugin package.
+14. Performance profiling and targeted scale tuning cover pack build, status,
+    search, tag lookup, neighbors, lifecycle tracing, and atlas generation on
+    full-kernel packs.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -625,6 +629,55 @@ Rules:
 5. Normal IDA plugin packaging must not depend on MCP, installed skills, or
    generated kernel corpus packs.
 
+## Performance And Scale
+
+`tools/kernel_corpus/perf_profile.py` measures the major interactive and
+offline paths:
+
+```text
+pack_build
+status
+text_search
+tag_search
+neighbor_traversal
+lifecycle_tracing
+atlas_generation
+```
+
+Targeted optimizations are evidence-preserving:
+
+1. Builder-created indexes cover function names, tag lookup by tag, reverse
+   call-edge traversal, and value joins.
+2. Status uses the manifest FTS row count when available instead of scanning
+   the FTS virtual table on every status call.
+3. Search uses FTS for excerpt/term search when available and keeps `LIKE`
+   fallback for names and non-FTS packs.
+4. Bulk search and neighbor traversal return artifact paths without checking
+   the filesystem for every candidate; direct `get_function` and evidence-pack
+   generation still report missing artifact warnings.
+5. Lifecycle seed-term discovery can request excerpts in the first search
+   result, avoiding repeated function fetches during candidate validation.
+6. Atlas generation reuses repeated search and neighbor results within one
+   generation pass while preserving deterministic output ordering.
+
+Observed local ntoskrnl smoke scale:
+
+```text
+functions: 29964
+call edges: 123081
+status: ~12 ms
+text/tag search: ~25-35 ms
+neighbor traversal depth 2 limit 120: ~21 ms
+process_object lifecycle max seeds 32 depth 2: ~15 s
+atlas 9 pages limit 24: ~16 s
+pack build with indexes: ~13 s
+```
+
+Recommended first-pass bounds are lifecycle `max_seeds=32`, lifecycle
+`depth=2`, atlas `limit=24`, and search limits between 20 and 50. Higher
+limits remain available for offline review, but agents should first inspect
+gaps and evidence quality before widening graph expansion.
+
 ## Implementation Phases
 
 ### Phase 0: Skeleton and design
@@ -892,6 +945,31 @@ Acceptance:
 - Avoid writing into the user's global skill directory during tests.
 - Test deterministic helper behavior with temporary target roots.
 
+### Phase 14: Performance and scale pass
+
+Deliver:
+
+```text
+tools/kernel_corpus/perf_profile.py
+tools/kernel_corpus/query.py
+tools/kernel_corpus/store.py
+tools/kernel_corpus/lifecycle.py
+tools/kernel_corpus/atlas.py
+tests/test_kernel_corpus_perf_profile.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+```
+
+Acceptance:
+
+- Add lightweight timings for pack build, status, text search, tag search,
+  neighbor traversal, lifecycle tracing, and atlas generation.
+- Profile the local ntoskrnl smoke pack when available.
+- Optimize only measured bottlenecks while preserving deterministic ordering
+  and evidence quality.
+- Add fixture tests for profiler output and changed query behavior.
+- Document observed full-kernel scale limits and recommended bounds.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -910,7 +988,8 @@ Test layers:
 8. Lifecycle/atlas quality tests for cross-topic penalties and hub filtering.
 9. Install wiring tests for dry-run skill plans, explicit temporary target
    roots, update/delete behavior, and MCP config JSON shape.
-10. Optional integration smoke against the real ntoskrnl pack when present.
+10. Performance profiler tests for fixture build and retrieval coverage.
+11. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -926,6 +1005,10 @@ Integration tests should skip cleanly when the large corpus path is absent.
   atlas pages.
 - Keep skill and MCP install helpers dry-run-first, and require explicit target
   roots in tests.
+- Rebuild older packs before judging reverse-neighbor performance; existing
+  SQLite files do not gain new builder indexes until rebuilt.
+- Keep bulk retrieval bounded and deterministic. Do not suppress low-confidence
+  evidence solely to improve timing.
 - Treat atlas hubs as relevance-filtered retrieval hints; generic helpers are
   intentionally suppressed from hub lists.
 - Treat answer harness validation as citation lint, not final factual proof.

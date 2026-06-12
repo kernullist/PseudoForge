@@ -44,7 +44,9 @@ def corpus_status(pack_root: str | Path) -> dict[str, Any]:
     with connect_database(paths["sqlite_path"]) as connection:
         for table in ("functions", "function_tags", "call_edges", "function_imports", "function_strings"):
             counts[table] = _table_count(connection, table)
-        counts["function_fts"] = _table_count(connection, "function_fts") if _has_fts(connection) else 0
+        counts["function_fts"] = _manifest_int(manifest, "fts_row_count")
+        if counts["function_fts"] < 0:
+            counts["function_fts"] = _table_count(connection, "function_fts") if _has_fts(connection) else 0
         db_manifest = read_manifest_rows(connection)
     if str(manifest.get("source_index_sha256", "")) != str(db_manifest.get("source_index_sha256", "")):
         warnings.append("Manifest hash differs between manifest.json and corpus_manifest table.")
@@ -66,6 +68,7 @@ def search_functions(
     tags: list[str] | tuple[str, ...] | None = None,
     name_regex: str = "",
     limit: int = DEFAULT_SEARCH_LIMIT,
+    include_excerpt: bool = False,
 ) -> list[dict[str, Any]]:
     paths = _pack_paths(pack_root)
     bounded_limit = _bounded_limit(limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
@@ -98,12 +101,23 @@ def search_functions(
             candidate_eas = set.intersection(*sets)
         else:
             candidate_eas = set(_all_eas(connection, limit=bounded_limit))
+        score_names = _names_for_eas(connection, candidate_eas) if query_text else {}
         ordered_eas = sorted(
             candidate_eas,
-            key=lambda ea: (-_score_candidate(connection, ea, query_text, reasons_by_ea.get(ea, set())), int(ea, 0)),
+            key=lambda ea: (
+                -_score_candidate(score_names.get(ea, ""), query_text, reasons_by_ea.get(ea, set())),
+                int(ea, 0),
+            ),
         )[:bounded_limit]
         return [
-            _function_payload(connection, ea, include_excerpt=False, include_artifacts=True, reasons=reasons_by_ea.get(ea, set()))
+            _function_payload(
+                connection,
+                ea,
+                include_excerpt=include_excerpt,
+                include_artifacts=True,
+                check_artifacts=False,
+                reasons=reasons_by_ea.get(ea, set()),
+            )
             for ea in ordered_eas
         ]
 
@@ -124,8 +138,46 @@ def get_function(
             normalized,
             include_excerpt=include_excerpt,
             include_artifacts=include_artifacts,
+            check_artifacts=True,
             reasons=set(),
         )
+
+
+def find_functions_by_name(
+    pack_root: str | Path,
+    name: str,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    include_excerpt: bool = False,
+) -> list[dict[str, Any]]:
+    paths = _pack_paths(pack_root)
+    bounded_limit = _bounded_limit(limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
+    name_text = str(name or "").strip()
+    if not name_text:
+        return []
+    with connect_database(paths["sqlite_path"]) as connection:
+        rows = list(
+            connection.execute(
+                """
+                SELECT ea
+                FROM functions
+                WHERE name = ? COLLATE NOCASE
+                ORDER BY ea
+                LIMIT ?
+                """,
+                (name_text, bounded_limit),
+            )
+        )
+        return [
+            _function_payload(
+                connection,
+                str(row["ea"]),
+                include_excerpt=include_excerpt,
+                include_artifacts=True,
+                check_artifacts=False,
+                reasons={"exact_name"},
+            )
+            for row in rows
+        ]
 
 
 def get_neighbors(
@@ -170,6 +222,7 @@ def get_neighbors(
                     item,
                     include_excerpt=False,
                     include_artifacts=True,
+                    check_artifacts=False,
                     reasons={"root"} if item == root_ea else {"neighbor"},
                 ),
                 depth=discovered[item],
@@ -219,6 +272,7 @@ def build_evidence_pack(
                     ea,
                     include_excerpt=True,
                     include_artifacts=True,
+                    check_artifacts=True,
                     reasons={"requested"},
                 )
             )
@@ -372,6 +426,7 @@ def _search_query_eas(
     reasons_by_ea: dict[str, set[str]],
 ) -> list[str]:
     result: list[str] = []
+    used_fts = False
     if _has_fts(connection):
         fts_query = _fts_query(query)
         if fts_query:
@@ -383,6 +438,7 @@ def _search_query_eas(
                     ea = str(row["ea"])
                     reasons_by_ea.setdefault(ea, set()).add("fts")
                     result.append(ea)
+                used_fts = True
             except sqlite3.Error:
                 pass
     like = "%%%s%%" % query
@@ -390,15 +446,29 @@ def _search_query_eas(
         """
         SELECT ea
         FROM functions
-        WHERE name LIKE ? OR cleaned_excerpt LIKE ?
+        WHERE name LIKE ?
         ORDER BY ea
         LIMIT ?
         """,
-        (like, like, limit),
+        (like, limit),
     ):
         ea = str(row["ea"])
         reasons_by_ea.setdefault(ea, set()).add("text")
         result.append(ea)
+    if not used_fts:
+        for row in connection.execute(
+            """
+            SELECT ea
+            FROM functions
+            WHERE cleaned_excerpt LIKE ?
+            ORDER BY ea
+            LIMIT ?
+            """,
+            (like, limit),
+        ):
+            ea = str(row["ea"])
+            reasons_by_ea.setdefault(ea, set()).add("text")
+            result.append(ea)
     return list(dict.fromkeys(result))
 
 
@@ -453,6 +523,7 @@ def _search_by_value(
                 str(row["ea"]),
                 include_excerpt=False,
                 include_artifacts=True,
+                check_artifacts=False,
                 reasons={("%s:%s" % (reason_prefix, row["matched_value"]))},
             )
             for row in rows
@@ -465,6 +536,7 @@ def _function_payload(
     *,
     include_excerpt: bool,
     include_artifacts: bool,
+    check_artifacts: bool,
     reasons: set[str],
 ) -> dict[str, Any]:
     row = connection.execute("SELECT * FROM functions WHERE ea = ?", (ea,)).fetchone()
@@ -490,7 +562,8 @@ def _function_payload(
             "raw_vs_cleaned_diff": str(row["diff_path"] or ""),
         }
         payload["artifacts"] = artifacts
-        payload["warnings"].extend(_artifact_warnings(artifacts))
+        if check_artifacts:
+            payload["warnings"].extend(_artifact_warnings(artifacts))
     else:
         payload["summary_path"] = str(row["summary_path"] or "")
         payload["cleaned_path"] = str(row["cleaned_path"] or "")
@@ -555,11 +628,9 @@ def _function_exists(connection: sqlite3.Connection, ea: str) -> bool:
     return connection.execute("SELECT 1 FROM functions WHERE ea = ?", (ea,)).fetchone() is not None
 
 
-def _score_candidate(connection: sqlite3.Connection, ea: str, query: str, reasons: set[str]) -> int:
+def _score_candidate(name: str, query: str, reasons: set[str]) -> int:
     score = len(reasons)
     if query:
-        row = connection.execute("SELECT name FROM functions WHERE ea = ?", (ea,)).fetchone()
-        name = str(row["name"] if row else "")
         if name.lower() == query.lower():
             score += 10
         elif query.lower() in name.lower():
@@ -580,6 +651,13 @@ def _has_fts(connection: sqlite3.Connection) -> bool:
 
 def _table_count(connection: sqlite3.Connection, table: str) -> int:
     return int(connection.execute("SELECT COUNT(*) FROM %s" % table).fetchone()[0])
+
+
+def _manifest_int(manifest: dict[str, Any], key: str) -> int:
+    try:
+        return int(manifest.get(key, -1))
+    except (TypeError, ValueError):
+        return -1
 
 
 def _artifact_warnings(artifacts: dict[str, str]) -> list[str]:

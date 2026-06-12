@@ -301,6 +301,70 @@ Atlas hub lists are relevance-filtered. Generic helpers, validation wrappers,
 feature-flag probes, and subsystem-irrelevant neighbors are intentionally
 suppressed so the hub section stays useful for review.
 
+## Profile Scale Behavior
+
+Use the performance profiler after query, lifecycle, atlas, or schema/index
+changes:
+
+```powershell
+python -B .\tools\kernel_corpus\perf_profile.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --lifecycle-max-seeds 32 `
+  --lifecycle-depth 2 `
+  --atlas-output-dir "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\reports\atlas-perf" `
+  --atlas-limit 24
+```
+
+Profile pack build separately when a source corpus is available:
+
+```powershell
+python -B .\tools\kernel_corpus\perf_profile.py `
+  --build-corpus-root "F:\kernullist\analysis-ouput\ntoskrnl" `
+  --build-pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl-perf-indexed" `
+  --overwrite-build `
+  --lifecycle-max-seeds 32 `
+  --lifecycle-depth 2 `
+  --atlas-output-dir "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl-perf-indexed\reports\atlas-perf" `
+  --atlas-limit 24
+```
+
+The profiler emits `kernel_corpus_performance_profile_v1` JSON with timings for:
+
+- `pack_build`
+- `status`
+- `text_search`
+- `tag_search`
+- `neighbor_traversal`
+- `lifecycle_tracing`
+- `atlas_generation`
+
+Observed local smoke on the 29,964-function ntoskrnl pack:
+
+| Operation | Before tuning | After indexed rebuild and query tuning |
+| --- | ---: | ---: |
+| Status | ~3.7 s | ~12 ms |
+| Text search | ~270 ms | ~33 ms |
+| Tag search | ~136 ms | ~25 ms |
+| Neighbor traversal, depth 2, limit 120 | ~1.2 s | ~21 ms |
+| Lifecycle, `process_object`, max seeds 32, depth 2 | ~90 s | ~15 s |
+| Atlas, 9 pages, limit 24 | ~45 s | ~16 s |
+| Pack build, 29,964 functions and 123,081 edges | not measured before | ~13 s |
+
+Recommended interactive bounds:
+
+- Keep normal search limits at 20 to 50. Raise toward 200 only for review
+  sessions where result breadth matters more than latency.
+- Use lifecycle `--max-seeds 32 --depth 2` for first-pass answers. Raise depth
+  only after inspecting gaps or ambiguous edges.
+- Use atlas `--limit 24` for the default subsystem map. Raise toward 80 only
+  for offline report refreshes.
+- Rebuild older packs with the current builder before judging neighbor or
+  lifecycle performance; the builder creates indexes for tag lookup and reverse
+  call-edge traversal.
+- Do not replace structured SQLite retrieval with fuzzy model search. Use FTS,
+  exact name lookup, bounded graph traversal, and evidence packs as the primary
+  path.
+
 ## Run The MCP Server
 
 Start the read-only stdio MCP server:
@@ -488,7 +552,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_atlas.py `
   tests/test_kernel_corpus_answer_harness.py `
   tests/test_kernel_corpus_validate_pack.py `
-  tests/test_kernel_corpus_install_wiring.py
+  tests/test_kernel_corpus_install_wiring.py `
+  tests/test_kernel_corpus_perf_profile.py
 ```
 
 For documentation-only edits, also run:

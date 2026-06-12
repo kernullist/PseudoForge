@@ -38,6 +38,14 @@ class KernelCorpusQueryTests(unittest.TestCase):
             self.assertEqual("NtCreateUserProcess", results[0]["name"])
             self.assertIn("process_thread", results[0]["tags"])
 
+    def test_find_functions_by_name_uses_exact_case_insensitive_lookup(self) -> None:
+        with _built_pack() as pack_root:
+            results = query.find_functions_by_name(pack_root, "ntcreateuserprocess", limit=5)
+
+            self.assertEqual(["NtCreateUserProcess"], [item["name"] for item in results])
+            self.assertEqual(["0x140001000"], [item["ea"] for item in results])
+            self.assertIn("exact_name", results[0]["why_selected"])
+
     def test_search_functions_filters_by_tag(self) -> None:
         with _built_pack() as pack_root:
             results = query.search_functions(pack_root, tags=["memory"], limit=10)

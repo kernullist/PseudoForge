@@ -70,6 +70,21 @@ def create_schema(connection: sqlite3.Connection) -> bool:
             ea TEXT NOT NULL,
             string_value TEXT NOT NULL
         );
+
+        CREATE INDEX IF NOT EXISTS idx_functions_name_ea
+            ON functions(name, ea);
+
+        CREATE INDEX IF NOT EXISTS idx_function_tags_tag_ea
+            ON function_tags(tag, ea);
+
+        CREATE INDEX IF NOT EXISTS idx_call_edges_dst_src_kind
+            ON call_edges(dst_ea, src_ea, edge_kind);
+
+        CREATE INDEX IF NOT EXISTS idx_function_imports_ea_name
+            ON function_imports(ea, import_name);
+
+        CREATE INDEX IF NOT EXISTS idx_function_strings_ea_value
+            ON function_strings(ea, string_value);
         """
     )
     fts5_enabled = sqlite_supports_fts5(connection)

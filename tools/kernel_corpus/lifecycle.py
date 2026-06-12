@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.kernel_corpus.errors import KernelCorpusError, QueryError
-from tools.kernel_corpus.query import corpus_status, get_function, get_neighbors, search_functions
+from tools.kernel_corpus.query import corpus_status, find_functions_by_name, get_function, get_neighbors, search_functions
 from tools.kernel_corpus.schema import EVIDENCE_PACK_SCHEMA_VERSION
 
 ONTOLOGY_SCHEMA_VERSION = "kernel_corpus_lifecycle_ontology_v1"
@@ -226,7 +226,19 @@ def _discover_seed_name(
     limit: int,
 ) -> bool:
     exact_found = False
+    search_results = []
+    seen_eas = set()
+    for function in find_functions_by_name(pack_root, seed_name, limit=limit):
+        ea = str(function.get("ea", ""))
+        if ea:
+            seen_eas.add(ea)
+            search_results.append(function)
     for function in search_functions(pack_root, query=seed_name, limit=limit):
+        ea = str(function.get("ea", ""))
+        if ea and ea not in seen_eas:
+            seen_eas.add(ea)
+            search_results.append(function)
+    for function in search_results:
         candidate = _candidate_from_function(function)
         existing = candidates.setdefault(candidate.ea, candidate)
         _merge_candidate(existing, candidate)
@@ -253,14 +265,8 @@ def _discover_seed_term(
     term_text = str(term or "").strip()
     if not term_text:
         return
-    for function in search_functions(pack_root, query=term_text, limit=limit):
+    for function in search_functions(pack_root, query=term_text, limit=limit, include_excerpt=True):
         candidate = _candidate_from_function(function)
-        if not _term_matches_candidate(candidate, term_text):
-            try:
-                function = get_function(pack_root, candidate.ea, include_excerpt=True, include_artifacts=True)
-                candidate = _candidate_from_function(function)
-            except QueryError:
-                continue
         if not _term_matches_candidate(candidate, term_text):
             continue
         existing = candidates.setdefault(candidate.ea, candidate)

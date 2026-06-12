@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 from tools.kernel_corpus.errors import KernelCorpusError, QueryError
 from tools.kernel_corpus.query import (
     corpus_status,
+    find_functions_by_name,
     get_neighbors,
     search_by_import,
     search_by_string,
@@ -28,6 +29,7 @@ HUB_ROOT_LIMIT = 8
 DEFAULT_PAGE_CHARS = 12000
 MAX_PAGE_CHARS = 50000
 ATLAS_DIR_PARTS = ("reports", "atlas")
+SearchCache = dict[tuple[Any, ...], Any]
 
 
 @dataclass(frozen=True)
@@ -269,6 +271,7 @@ def generate_atlas(
     out_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     pages = []
+    search_cache: SearchCache = {}
     for spec in SUBSYSTEMS:
         page = build_subsystem_page(
             pack_root,
@@ -276,6 +279,7 @@ def generate_atlas(
             status=status,
             generated_at=generated_at,
             limit=bounded_limit,
+            search_cache=search_cache,
         )
         path = out_dir / spec.filename
         path.write_text(page["markdown"], encoding="utf-8")
@@ -358,10 +362,12 @@ def build_subsystem_page(
     status: dict[str, Any],
     generated_at: str,
     limit: int,
+    search_cache: SearchCache | None = None,
 ) -> dict[str, Any]:
-    candidates = _collect_candidates(pack_root, spec, limit=limit)
+    cache = search_cache if search_cache is not None else {}
+    candidates = _collect_candidates(pack_root, spec, limit=limit, search_cache=cache)
     selected = sorted(candidates.values(), key=_candidate_sort_key)[:limit]
-    hubs = _collect_hubs(pack_root, selected, spec)
+    hubs = _collect_hubs(pack_root, selected, spec, search_cache=cache)
     lifecycle_packs = _find_lifecycle_packs(status, spec.lifecycle_topics)
     gaps = _gaps_for_page(status, spec, selected, hubs, lifecycle_packs)
     markdown = _render_page(
@@ -389,27 +395,38 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _collect_candidates(pack_root: str | Path, spec: SubsystemSpec, *, limit: int) -> dict[str, dict[str, Any]]:
+def _collect_candidates(
+    pack_root: str | Path,
+    spec: SubsystemSpec,
+    *,
+    limit: int,
+    search_cache: SearchCache,
+) -> dict[str, dict[str, Any]]:
     candidates: dict[str, dict[str, Any]] = {}
     query_limit = max(limit, min(MAX_LIMIT, limit * 2))
     for name in spec.priority_names:
-        for function in search_functions(pack_root, query=name, limit=query_limit):
-            if str(function.get("name", "")).lower() == name.lower():
-                _merge_candidate(candidates, function, "priority_name:%s" % name, spec)
+        key = ("exact_name", str(pack_root), name, query_limit)
+        for function in _cached(search_cache, key, lambda name=name: find_functions_by_name(pack_root, name, limit=query_limit)):
+            _merge_candidate(candidates, function, "priority_name:%s" % name, spec)
     for term in spec.query_terms:
-        for function in search_functions(pack_root, query=term, limit=query_limit):
+        key = ("query", str(pack_root), term, query_limit)
+        for function in _cached(search_cache, key, lambda term=term: search_functions(pack_root, query=term, limit=query_limit)):
             _merge_candidate(candidates, function, "query:%s" % term, spec)
     for tag in spec.tags:
-        for function in search_functions(pack_root, tags=[tag], limit=query_limit):
+        key = ("tag", str(pack_root), tag, query_limit)
+        for function in _cached(search_cache, key, lambda tag=tag: search_functions(pack_root, tags=[tag], limit=query_limit)):
             _merge_candidate(candidates, function, "tag:%s" % tag, spec)
     if spec.name_regex:
-        for function in search_functions(pack_root, name_regex=spec.name_regex, limit=query_limit):
+        key = ("name_regex", str(pack_root), spec.name_regex, query_limit)
+        for function in _cached(search_cache, key, lambda: search_functions(pack_root, name_regex=spec.name_regex, limit=query_limit)):
             _merge_candidate(candidates, function, "name_regex:%s" % spec.name_regex, spec)
     for term in spec.import_terms:
-        for function in search_by_import(pack_root, term, limit=query_limit):
+        key = ("import", str(pack_root), term, query_limit)
+        for function in _cached(search_cache, key, lambda term=term: search_by_import(pack_root, term, limit=query_limit)):
             _merge_candidate(candidates, function, "import:%s" % term, spec)
     for term in spec.string_terms:
-        for function in search_by_string(pack_root, term, limit=query_limit):
+        key = ("string", str(pack_root), term, query_limit)
+        for function in _cached(search_cache, key, lambda term=term: search_by_string(pack_root, term, limit=query_limit)):
             _merge_candidate(candidates, function, "string:%s" % term, spec)
     return candidates
 
@@ -482,12 +499,24 @@ def _score_candidate(candidate: dict[str, Any], spec: SubsystemSpec) -> float:
     return max(0.01, min(0.99, score))
 
 
-def _collect_hubs(pack_root: str | Path, functions: list[dict[str, Any]], spec: SubsystemSpec) -> list[dict[str, Any]]:
+def _collect_hubs(
+    pack_root: str | Path,
+    functions: list[dict[str, Any]],
+    spec: SubsystemSpec,
+    *,
+    search_cache: SearchCache,
+) -> list[dict[str, Any]]:
     hubs: dict[str, dict[str, Any]] = {}
     selected_eas = {str(function.get("ea", "")) for function in functions if str(function.get("ea", ""))}
     for root in functions[:HUB_ROOT_LIMIT]:
         try:
-            neighbors = get_neighbors(pack_root, root["ea"], direction="both", depth=1, limit=40)
+            root_ea = str(root["ea"])
+            key = ("neighbors", str(pack_root), root_ea, "both", 1, 40)
+            neighbors = _cached(
+                search_cache,
+                key,
+                lambda root_ea=root_ea: get_neighbors(pack_root, root_ea, direction="both", depth=1, limit=40),
+            )
         except QueryError:
             continue
         for node in neighbors.get("nodes", []):
@@ -533,6 +562,12 @@ def _collect_hubs(pack_root: str | Path, functions: list[dict[str, Any]], spec: 
         if not _is_noisy_generic_hub(hub) and _hub_is_relevant(hub, spec, selected_eas)
     ]
     return filtered[:10]
+
+
+def _cached(cache: SearchCache, key: tuple[Any, ...], callback: Callable[[], Any]) -> Any:
+    if key not in cache:
+        cache[key] = callback()
+    return cache[key]
 
 
 def _is_noisy_generic_hub(hub: dict[str, Any]) -> bool:
