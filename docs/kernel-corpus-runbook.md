@@ -72,6 +72,45 @@ time.
 
 ## Check Status
 
+Before trusting an existing pack, run the freshness validator:
+
+```powershell
+python -B .\tools\kernel_corpus\validate_pack.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --include-derived `
+  --format text
+```
+
+For machine-readable automation:
+
+```powershell
+python -B .\tools\kernel_corpus\validate_pack.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --include-derived `
+  --format json
+```
+
+The validator fails on clear pack inconsistencies: missing `manifest.json`,
+missing `corpus.sqlite`, unsupported schemas, SQLite `corpus_manifest` rows
+that differ from `manifest.json`, source-index hash mismatch when the source
+index is accessible, and function/count mismatches. It warns when an external
+source path cannot be verified.
+
+Derived artifact checks are optional. Use `--include-derived` to scan the
+default evidence-pack and atlas directories, or pass focused paths:
+
+```powershell
+python -B .\tools\kernel_corpus\validate_pack.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --evidence-pack "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\evidence-packs\process_object.json" `
+  --atlas-page "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\reports\atlas\process.md" `
+  --format text
+```
+
+Regenerate packs, lifecycle evidence packs, atlas pages, and answer prompts
+when the validator reports stale source hashes or derived artifacts older than
+the pack manifest.
+
 Check pack health before answering broad questions:
 
 ```powershell
@@ -335,6 +374,9 @@ callgraph, import/string, or evidence-pack questions from a kernel corpus. The
 skill contains retrieval procedure and answer contracts only; it does not
 contain corpus data.
 
+Run `tools\kernel_corpus\validate_pack.py` before relying on an older pack,
+then use the skill for retrieval and answer discipline.
+
 For durable answer handoff, combine the skill with
 `tools\kernel_corpus\answer_harness.py` so the final prompt and validation
 report are reproducible.
@@ -366,7 +408,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_lifecycle.py `
   tests/test_kernel_corpus_skill.py `
   tests/test_kernel_corpus_atlas.py `
-  tests/test_kernel_corpus_answer_harness.py
+  tests/test_kernel_corpus_answer_harness.py `
+  tests/test_kernel_corpus_validate_pack.py
 ```
 
 For documentation-only edits, also run:
@@ -378,6 +421,10 @@ git diff --check -- .
 ## Troubleshooting
 
 - Missing `manifest.json` or `corpus.sqlite`: rebuild the pack.
+- Validator `source_index_hash_mismatch`: rebuild the pack from the current
+  source corpus before trusting query, lifecycle, atlas, or answer outputs.
+- Validator derived-artifact stale errors: regenerate lifecycle evidence packs,
+  atlas pages, and answer prompts from the current pack.
 - Empty FTS results: check `counts.function_fts`; SQLite FTS5 may be disabled
   in the local Python build.
 - Missing exact lifecycle seeds: inspect the ontology seed names and search by

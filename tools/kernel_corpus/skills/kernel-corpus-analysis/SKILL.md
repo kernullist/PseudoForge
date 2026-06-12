@@ -16,10 +16,17 @@ Claim -> EA -> function name -> artifact path -> inference level
 ## First Moves
 
 1. Locate the pack root from the user, thread context, MCP config, or a local path such as `<workspace>/pseudoforge_out/kernel_corpus/<target>`.
-2. Call `corpus_status` before analysis. Check schema, function count, skipped count, manifest path, SQLite path, and warnings.
-3. Use MCP first when available. If MCP is unavailable, use the local CLIs under `tools/kernel_corpus/`.
-4. Prefer focused evidence packs over loading broad raw corpus output.
-5. Do not answer from generic Windows internals alone.
+2. Run the local freshness validator when the pack may be old or when derived evidence packs/atlas pages already exist.
+3. Call `corpus_status` before analysis. Check schema, function count, skipped count, manifest path, SQLite path, and warnings.
+4. Use MCP first when available. If MCP is unavailable, use the local CLIs under `tools/kernel_corpus/`.
+5. Prefer focused evidence packs over loading broad raw corpus output.
+6. Do not answer from generic Windows internals alone.
+
+Local freshness fallback:
+
+```powershell
+python -B .\tools\kernel_corpus\validate_pack.py --pack-root "<pack-root>" --include-derived --format text
+```
 
 Local lifecycle fallback:
 
@@ -57,6 +64,7 @@ python -B .\tools\kernel_corpus\answer_harness.py --pack-root "<pack-root>" --ev
 - Subsystem questions: generate or inspect atlas pages first when available; then search by names, tags, imports, and strings; expand nearby callers/callees; build an evidence pack for broad answers.
 - Import/string questions: use `search_by_import` or `search_by_string`, then verify with `get_function`.
 - Broad answers: call `build_evidence_pack` or `trace_lifecycle` and treat the pack as the answer boundary.
+- Freshness checks: use `validate_pack.py` before reusing older pack roots, lifecycle evidence packs, or atlas pages. Treat validator errors as stop-and-rebuild signals.
 - Durable handoff or review: call the local answer harness to generate the bounded prompt and validate the drafted Markdown answer.
 
 ## Evidence Discipline
@@ -66,6 +74,7 @@ python -B .\tools\kernel_corpus\answer_harness.py --pack-root "<pack-root>" --ev
 - Treat lifecycle phase labels and LLM rename suggestions as hypotheses until supported by function evidence or edges.
 - State gaps from skipped functions, missing exact seeds, missing edges, stale packs, or low-confidence phase assignments.
 - Do not claim a transition is proven unless the evidence pack contains a supporting edge or function relationship.
+- Do not hide validator errors. Rebuild stale packs or derived artifacts before answering, unless the user explicitly wants a stale-pack comparison.
 - Treat answer harness warnings as citation lint that must be reviewed before reusing an answer.
 - Do not mutate the source corpus or IDB. Writing a derived evidence pack is acceptable only when the workflow or user asks for a durable artifact.
 

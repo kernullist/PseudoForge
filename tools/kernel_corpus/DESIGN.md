@@ -35,6 +35,7 @@ tools/
     query.py
     schema.py
     store.py
+    validate_pack.py
     ontology/
       process_object.json
       thread_object.json
@@ -130,7 +131,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The initial implementation is complete through Phase 10:
+The initial implementation is complete through Phase 11:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -149,6 +150,9 @@ The initial implementation is complete through Phase 10:
 10. The answer harness turns evidence packs into bounded AI prompts and checks
     answer Markdown for missing EA, function-name, artifact-path, and gap
     discipline warnings.
+11. The pack freshness validator checks manifest, SQLite, source-index hash,
+    function counts, lifecycle evidence packs, and atlas metadata before an
+    operator or agent trusts derived artifacts.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -468,6 +472,39 @@ python -B .\tools\kernel_corpus\answer_harness.py `
 Prompt and report files are derived artifacts. Store them under the ignored
 pack output tree or another external research folder, not in Git.
 
+## Pack Freshness Validator
+
+`tools/kernel_corpus/validate_pack.py` is the preflight gate for pack reuse. It
+returns JSON by default and has a human-readable text mode for operator checks.
+The validator does not mutate the source corpus, the pack, or derived
+artifacts.
+
+It fails on clear inconsistencies:
+
+- missing pack root, `manifest.json`, or `corpus.sqlite`
+- unsupported manifest schema or pack schema
+- `corpus_manifest` rows that differ from `manifest.json`
+- accessible source index hash that differs from
+  `manifest.source_index_sha256`
+- manifest function/count metadata that differs from SQLite tables
+- derived evidence or atlas metadata that clearly points to a different pack
+  or an older pack generation
+
+It warns when freshness cannot be proven, such as an inaccessible external
+source index path or missing optional generated-time metadata.
+
+Example:
+
+```powershell
+python -B .\tools\kernel_corpus\validate_pack.py `
+  --pack-root "<pack-root>" `
+  --include-derived `
+  --format text
+```
+
+For focused checks, pass `--evidence-pack` and `--atlas-page` explicitly
+instead of scanning the default derived-artifact directories.
+
 ## Skill Layer
 
 The skill should be small. It should not contain the ntoskrnl corpus. It should
@@ -487,9 +524,10 @@ Core skill rules:
 4. Separate confirmed evidence from inference.
 5. Build an evidence pack for broad questions.
 6. For lifecycle questions, call `trace_lifecycle` first.
-7. For durable handoff or review, run `answer_harness.py` to produce the
+7. Run `validate_pack.py` before trusting an old pack or derived artifacts.
+8. For durable handoff or review, run `answer_harness.py` to produce the
    prompt and warning report.
-8. If the corpus is partial or stale, state the limitation.
+9. If the corpus is partial or stale, state the limitation.
 
 ## Answer Contract
 
@@ -534,13 +572,14 @@ In this kernel, explain the process object lifecycle from creation to deletion.
 
 Agent workflow:
 
-1. `corpus_status(pack_root)`
-2. `trace_lifecycle(pack_root, "process_object", depth=2)`
-3. `get_function` for the highest-impact functions in each phase
-4. Optionally `get_neighbors` around ambiguous edges
-5. Build a bounded prompt with `answer_harness.py`
-6. Produce an evidence-grounded narrative with citations
-7. Validate the answer with `answer_harness.py --answer-in`
+1. `validate_pack.py --pack-root <pack-root> --include-derived`
+2. `corpus_status(pack_root)`
+3. `trace_lifecycle(pack_root, "process_object", depth=2)`
+4. `get_function` for the highest-impact functions in each phase
+5. Optionally `get_neighbors` around ambiguous edges
+6. Build a bounded prompt with `answer_harness.py`
+7. Produce an evidence-grounded narrative with citations
+8. Validate the answer with `answer_harness.py --answer-in`
 
 The final answer should read like a kernel reverse-engineering report, not a
 generic OS textbook explanation.
@@ -745,6 +784,28 @@ Acceptance:
   nearby artifact path, or required gaps/uncertainty section.
 - Keep generated prompts and reports under ignored or external output roots.
 
+### Phase 11: Pack freshness validator
+
+Deliver:
+
+```text
+tools/kernel_corpus/validate_pack.py
+tests/test_kernel_corpus_validate_pack.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/skills/kernel-corpus-analysis/SKILL.md
+```
+
+Acceptance:
+
+- Validate pack root, manifest, SQLite, supported schema, SQLite manifest
+  rows, source-index hash, and function/count consistency.
+- Optionally validate lifecycle evidence-pack schema, pack root, topic,
+  generated time, and atlas Markdown metadata.
+- Emit machine-readable JSON and human-readable text output.
+- Warn on unverifiable external paths and fail only on clear inconsistencies.
+- Tests cover fresh, stale, missing, and partial states without requiring the
+  real ntoskrnl corpus.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -758,7 +819,9 @@ Test layers:
 4. MCP contract tests with fixed JSON snapshots.
 5. Lifecycle phase assignment tests with synthetic function graphs.
 6. Answer harness tests for prompt generation and citation warnings.
-7. Optional integration smoke against the real ntoskrnl pack when present.
+7. Pack freshness validator tests for fresh, stale, missing, partial, and
+   derived-artifact states.
+8. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -770,6 +833,8 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Never mutate the source PseudoForge corpus from MCP tools.
 - Never update the IDB from this tool.
 - Keep lifecycle heuristics reviewable as JSON ontology plus Python scoring.
+- Run pack freshness validation before reusing old packs, evidence packs, or
+  atlas pages.
 - Treat answer harness validation as citation lint, not final factual proof.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
@@ -785,6 +850,6 @@ The first production-worthy milestone is:
 
 ```text
 PseudoForge corpus -> corpus.sqlite -> MCP search/get/neighbor tools ->
-trace_lifecycle(process_object) -> evidence pack -> answer harness ->
-grounded AI answer
+validate_pack -> trace_lifecycle(process_object) -> evidence pack ->
+answer harness -> grounded AI answer
 ```
