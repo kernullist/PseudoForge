@@ -11,6 +11,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.kernel_corpus.errors import QueryError
+from tools.kernel_corpus.lifecycle import (
+    DEFAULT_DEPTH as DEFAULT_LIFECYCLE_DEPTH,
+    DEFAULT_MAX_SEEDS as DEFAULT_LIFECYCLE_MAX_SEEDS,
+    MAX_DEPTH as MAX_LIFECYCLE_DEPTH,
+    MAX_MAX_SEEDS as MAX_LIFECYCLE_MAX_SEEDS,
+    trace_lifecycle,
+)
 from tools.kernel_corpus.query import (
     build_evidence_pack,
     corpus_status,
@@ -99,6 +106,31 @@ class KernelCorpusMcpServer:
                 limit = _bounded_limit(args.get("limit"), DEFAULT_LIMIT, MAX_LIMIT)
                 results = search_by_string(self.pack_root, str(_required(args, "query")), limit=limit)
                 return self._ok({"results": results, "limit": limit})
+            if name == "trace_lifecycle":
+                max_seeds = _bounded_limit(
+                    args.get("max_seeds"),
+                    DEFAULT_LIFECYCLE_MAX_SEEDS,
+                    MAX_LIFECYCLE_MAX_SEEDS,
+                )
+                depth = _bounded_limit(args.get("depth"), DEFAULT_LIFECYCLE_DEPTH, MAX_LIFECYCLE_DEPTH)
+                pack = trace_lifecycle(
+                    self.pack_root,
+                    str(_required(args, "topic")),
+                    max_seeds=max_seeds,
+                    depth=depth,
+                    output_path=None,
+                )
+                return self._ok(
+                    {
+                        "evidence_pack": pack,
+                        "topic": pack.get("topic", ""),
+                        "selected_function_count": pack.get("summary", {}).get("selected_function_count", 0),
+                        "edge_count": pack.get("summary", {}).get("edge_count", 0),
+                        "max_seeds": max_seeds,
+                        "depth": depth,
+                    },
+                    warnings=_coerce_warnings(pack) + _coerce_gaps(pack) + _coerce_uncertainty_notes(pack),
+                )
             if name == "build_evidence_pack":
                 pack = build_evidence_pack(
                     self.pack_root,
@@ -264,6 +296,13 @@ def _coerce_gaps(payload: dict[str, Any]) -> list[str]:
     return ["gap:%s" % item for item in values]
 
 
+def _coerce_uncertainty_notes(payload: dict[str, Any]) -> list[str]:
+    values = payload.get("uncertainty_notes", []) if isinstance(payload, dict) else []
+    if not isinstance(values, list):
+        return []
+    return ["uncertainty:%s" % item for item in values]
+
+
 def _jsonrpc_result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {
         "jsonrpc": "2.0",
@@ -358,6 +397,30 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "properties": {
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "default": DEFAULT_LIMIT, "minimum": 1, "maximum": MAX_LIMIT},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "trace_lifecycle",
+        "description": "Build an in-memory lifecycle evidence pack for a topic such as process_object.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["topic"],
+            "properties": {
+                "topic": {"type": "string"},
+                "max_seeds": {
+                    "type": "integer",
+                    "default": DEFAULT_LIFECYCLE_MAX_SEEDS,
+                    "minimum": 1,
+                    "maximum": MAX_LIFECYCLE_MAX_SEEDS,
+                },
+                "depth": {
+                    "type": "integer",
+                    "default": DEFAULT_LIFECYCLE_DEPTH,
+                    "minimum": 1,
+                    "maximum": MAX_LIFECYCLE_DEPTH,
+                },
             },
             "additionalProperties": False,
         },

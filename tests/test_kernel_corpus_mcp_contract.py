@@ -10,8 +10,12 @@ from pathlib import Path
 from tools.kernel_corpus import builder
 from tools.kernel_corpus.mcp_server import (
     DEFAULT_LIMIT,
+    DEFAULT_LIFECYCLE_DEPTH,
+    DEFAULT_LIFECYCLE_MAX_SEEDS,
     DEFAULT_NEIGHBOR_DEPTH,
     MAX_LIMIT,
+    MAX_LIFECYCLE_DEPTH,
+    MAX_LIFECYCLE_MAX_SEEDS,
     MAX_NEIGHBOR_DEPTH,
     KernelCorpusMcpServer,
 )
@@ -25,6 +29,7 @@ EXPECTED_TOOLS = {
     "get_neighbors",
     "search_by_import",
     "search_by_string",
+    "trace_lifecycle",
     "build_evidence_pack",
 }
 
@@ -39,11 +44,17 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             search_limit = tools["search_functions"]["inputSchema"]["properties"]["limit"]
             neighbor_depth = tools["get_neighbors"]["inputSchema"]["properties"]["depth"]
             neighbor_limit = tools["get_neighbors"]["inputSchema"]["properties"]["limit"]
+            lifecycle_max_seeds = tools["trace_lifecycle"]["inputSchema"]["properties"]["max_seeds"]
+            lifecycle_depth = tools["trace_lifecycle"]["inputSchema"]["properties"]["depth"]
             self.assertEqual(DEFAULT_LIMIT, search_limit["default"])
             self.assertEqual(MAX_LIMIT, search_limit["maximum"])
             self.assertEqual(DEFAULT_NEIGHBOR_DEPTH, neighbor_depth["default"])
             self.assertEqual(MAX_NEIGHBOR_DEPTH, neighbor_depth["maximum"])
             self.assertEqual(MAX_LIMIT, neighbor_limit["maximum"])
+            self.assertEqual(DEFAULT_LIFECYCLE_MAX_SEEDS, lifecycle_max_seeds["default"])
+            self.assertEqual(MAX_LIFECYCLE_MAX_SEEDS, lifecycle_max_seeds["maximum"])
+            self.assertEqual(DEFAULT_LIFECYCLE_DEPTH, lifecycle_depth["default"])
+            self.assertEqual(MAX_LIFECYCLE_DEPTH, lifecycle_depth["maximum"])
 
     def test_corpus_status_returns_stable_json_shape(self) -> None:
         with _built_pack() as pack_root:
@@ -134,6 +145,33 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             self.assertEqual("", pack["output_path"])
             self.assertEqual(["Function not found in pack: 0xDEADBEEF"], pack["gaps"])
             self.assertIn("gap:Function not found in pack: 0xDEADBEEF", payload["warnings"])
+
+    def test_trace_lifecycle_returns_in_memory_evidence_pack(self) -> None:
+        with _built_pack() as pack_root:
+            payload = KernelCorpusMcpServer(pack_root).call_tool(
+                "trace_lifecycle",
+                {
+                    "topic": "process_object",
+                    "depth": 99,
+                    "max_seeds": 999,
+                },
+            )
+
+            self.assertTrue(payload["ok"])
+            self.assertEqual("process_object", payload["topic"])
+            self.assertEqual(MAX_LIFECYCLE_DEPTH, payload["depth"])
+            self.assertEqual(MAX_LIFECYCLE_MAX_SEEDS, payload["max_seeds"])
+            pack = payload["evidence_pack"]
+            self.assertEqual("kernel_corpus_evidence_pack_v1", pack["schema"])
+            self.assertEqual("", pack["output_path"])
+            self.assertGreaterEqual(payload["selected_function_count"], 1)
+            phase_names = {
+                function["name"]: phase["id"]
+                for phase in pack["phases"]
+                for function in phase["functions"]
+            }
+            self.assertEqual("entry", phase_names["NtCreateUserProcess"])
+            self.assertEqual("allocate", phase_names["PspAllocateProcess"])
 
     def test_invalid_ea_returns_structured_error(self) -> None:
         with _built_pack() as pack_root:
