@@ -84,6 +84,7 @@ Key documentation:
 - [ida_pseudocode_refactor_plugin_design.md](ida_pseudocode_refactor_plugin_design.md): overall product and architecture design.
 - [deterministic_rules_matching_engine_design.md](deterministic_rules_matching_engine_design.md): deterministic JSON rule engine design.
 - [docs/rules.md](docs/rules.md): project-local and user-global rule authoring workflow.
+- [docs/kernel-corpus-install-usage.md](docs/kernel-corpus-install-usage.md): user-facing Kernel Corpus release-package installation, MCP/skill setup, and daily usage guide.
 - [docs/kernel-corpus-runbook.md](docs/kernel-corpus-runbook.md): build, query, MCP, lifecycle, atlas, and freshness workflow for Kernel Corpus packs.
 - [tools/kernel_corpus/DESIGN.md](tools/kernel_corpus/DESIGN.md): Kernel Corpus SQLite/MCP design and phase status.
 - [samples/kernel_pattern_driver/README.md](samples/kernel_pattern_driver/README.md): WDK sample corpus for kernel-pattern analysis.
@@ -114,6 +115,10 @@ The default archive path is:
 ```text
 release\PseudoForge-<new-version>.zip
 ```
+
+Kernel Corpus data packages are not included in PseudoForge plugin releases.
+Publish and install large corpus artifacts through the dedicated
+`kernullist/kernel-corpus` GitHub Release channel.
 
 Useful release options:
 

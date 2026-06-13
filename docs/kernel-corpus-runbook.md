@@ -5,6 +5,10 @@ large IDA batch run has produced corpus artifacts. The tooling is a
 consumer-side analysis layer under `tools/kernel_corpus/`; it does not modify
 the IDB and does not belong under `ida_pseudoforge/`.
 
+For a user-facing install and daily usage walkthrough, start with
+[`docs/kernel-corpus-install-usage.md`](kernel-corpus-install-usage.md), then
+return to this runbook for detailed operator commands and edge-case handling.
+
 ## Purpose
 
 Use this workflow when an agent or analyst needs target-specific answers such
@@ -1262,15 +1266,18 @@ report are reproducible.
 Plan the copy target without writing anything:
 
 ```powershell
+$SkillRoot = "$env:USERPROFILE\.claude\skills"   # Claude Code
+# $SkillRoot = "$env:USERPROFILE\.codex\skills" # Codex
+
 python -B .\tools\kernel_corpus\install_wiring.py skill-plan `
-  --target-root "$env:USERPROFILE\.codex\skills"
+  --target-root $SkillRoot
 ```
 
-Install the skill into an explicit Codex skill root:
+Install the skill into an explicit skill root:
 
 ```powershell
 python -B .\tools\kernel_corpus\install_wiring.py install-skill `
-  --target-root "$env:USERPROFILE\.codex\skills" `
+  --target-root $SkillRoot `
   --apply
 ```
 
@@ -1278,7 +1285,7 @@ Update the installed copy from the repo source:
 
 ```powershell
 python -B .\tools\kernel_corpus\install_wiring.py install-skill `
-  --target-root "$env:USERPROFILE\.codex\skills" `
+  --target-root $SkillRoot `
   --replace `
   --apply
 ```
@@ -1287,7 +1294,7 @@ Uninstall the copied skill:
 
 ```powershell
 python -B .\tools\kernel_corpus\install_wiring.py uninstall-skill `
-  --target-root "$env:USERPROFILE\.codex\skills" `
+  --target-root $SkillRoot `
   --apply
 ```
 
@@ -1301,6 +1308,51 @@ The Kernel Corpus skill and MCP server are operational add-ons, not IDA plugin
 runtime dependencies. Keep them under `tools/kernel_corpus/`, keep generated
 packs under ignored or external output roots, and keep normal PseudoForge IDA
 plugin packaging independent of MCP availability.
+
+## Package Release Assets
+
+For large corpus distribution, publish split archives as GitHub Release assets
+in the dedicated `kernullist/kernel-corpus` artifact repository instead of
+committing the corpus or archive parts into Git history. PseudoForge code
+releases should not carry corpus packages. The local packaging helper writes:
+
+```text
+artifact-manifest.json
+checksums.sha256
+README-install.md
+<artifact-id>.tar.gz.001
+<artifact-id>.tar.gz.002
+...
+```
+
+Package a corpus release:
+
+```powershell
+python -B .\tools\kernel_corpus\package_release.py `
+  --pack-root "F:\pseudoforge-corpora\ntoskrnl-26200.8457" `
+  --source-corpus-root "F:\kernullist\analysis-ouput\ntoskrnl" `
+  --artifact-id ntoskrnl-26200.8457-amd64-r1 `
+  --output-dir "F:\kernel-corpus-release-staging" `
+  --github-repo kernullist/kernel-corpus `
+  --volume-size 1900m
+```
+
+Upload the generated assets:
+
+```powershell
+gh release create ntoskrnl-26200.8457-amd64-r1 `
+  --repo kernullist/kernel-corpus `
+  --title "Kernel Corpus ntoskrnl-26200.8457-amd64-r1" `
+  --notes-file "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\README-install.md" `
+  "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\ntoskrnl-26200.8457-amd64-r1.tar.gz.*" `
+  "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\artifact-manifest.json" `
+  "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\checksums.sha256"
+```
+
+Install a release package by downloading all assets, comparing hashes with
+`checksums.sha256`, creating the install root if needed, reassembling the split
+archive with `copy /b`, extracting with `tar -xzf`, and pointing MCP at
+`<install-root>\<artifact-id>\kernel-pack`.
 
 ## Freshness Rules
 
@@ -1340,7 +1392,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_canonical_review_queue.py `
   tests/test_kernel_corpus_answer_planner.py `
   tests/test_kernel_corpus_knowledge_graph.py `
-  tests/test_kernel_corpus_answer_eval.py
+  tests/test_kernel_corpus_answer_eval.py `
+  tests/test_kernel_corpus_package_release.py
 ```
 
 For documentation-only edits, also run:
@@ -1395,5 +1448,7 @@ git diff --check -- .
 - Knowledge graph bridge or centrality output looks important: treat it as a
   retrieval hint, then verify with `get_function`, canonical answers, or an
   evidence pack before making a claim.
+- Release package extraction leaves no `kernel-pack`: confirm the split parts
+  were reassembled in order and extracted under the intended install root.
 - Very broad answers: build or inspect an evidence pack first, then answer from
   the pack instead of scanning the full corpus ad hoc.

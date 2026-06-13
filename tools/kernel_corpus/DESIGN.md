@@ -43,6 +43,7 @@ tools/
     knowledge_graph.py
     lifecycle.py
     mcp_server.py
+    package_release.py
     paths.py
     perf_profile.py
     query.py
@@ -80,6 +81,10 @@ F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\<target>\
 
 `pseudoforge_out/` is already ignored and is suitable for smoke output. Long
 term research corpora should live outside the repo.
+
+Shareable corpus packages should be published as GitHub Release assets in the
+dedicated `kernullist/kernel-corpus` artifact repository. PseudoForge code
+releases should not include generated corpus packs.
 
 ## Inputs
 
@@ -150,7 +155,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The implementation is complete through Phase 25:
+The implementation is complete through Phase 26:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -224,8 +229,13 @@ The implementation is complete through Phase 25:
     topic selection, required functions, citation discipline, degraded/stale
     canonical use, and live-retrieval fallback behavior without calling a
     model.
+26. Kernel Corpus release packaging writes split `tar.gz` assets, checksums,
+    install notes, and machine-readable artifact manifests for publication in
+    the dedicated `kernullist/kernel-corpus` release repository, keeping
+    generated corpus payloads out of PseudoForge code releases and Git history.
 
-Generated packs and reports remain intentionally outside Git.
+Generated packs, reports, and release package payloads remain intentionally
+outside Git.
 
 ### 1. Pack Builder
 
@@ -1103,6 +1113,56 @@ Rules:
 5. Normal IDA plugin packaging must not depend on MCP, installed skills, or
    generated kernel corpus packs.
 
+## Release Artifact Packaging
+
+`tools/kernel_corpus/package_release.py` packages an already built Kernel Corpus
+pack for distribution through the dedicated `kernullist/kernel-corpus` GitHub
+Release channel. It is a consumer-side artifact helper, not part of the IDA
+plugin release pipeline.
+
+The helper writes:
+
+```text
+<output-dir>\<artifact-id>\
+  artifact-manifest.json
+  checksums.sha256
+  README-install.md
+  <artifact-id>.tar.gz.001
+  <artifact-id>.tar.gz.002
+  ...
+```
+
+The archive layout keeps the MCP runtime pack at a predictable path:
+
+```text
+<artifact-id>\
+  kernel-pack\
+  raw-corpus\        # optional
+  run-logs\          # optional
+```
+
+Default publication target:
+
+```text
+kernullist/kernel-corpus
+```
+
+Operational rules:
+
+1. `kernel-pack` is required and must contain `manifest.json` and
+   `corpus.sqlite`.
+2. Raw PseudoForge corpus artifacts and run logs are optional release
+   components.
+3. The default split volume size is `1900m` to keep each upload comfortably
+   below common 2 GB GitHub release asset limits.
+4. The generated `artifact-manifest.json` records source pack identity, source
+   index hash, function counts, PseudoForge commit, selected release repo, and
+   install path examples.
+5. `checksums.sha256` covers the manifest, install README, and every split
+   archive part.
+6. PseudoForge release zips must not include these corpus packages. The
+   `kernel-corpus` repository release is the artifact registry.
+
 ## Performance And Scale
 
 `tools/kernel_corpus/perf_profile.py` measures the major interactive and
@@ -1819,6 +1879,36 @@ Acceptance:
 - Keep normal tests fixture-based and independent of the full ntoskrnl pack.
 - Keep generated eval reports, drafted answers, and goal prompts out of Git.
 
+### Phase 26: Corpus release package artifacts
+
+Deliver:
+
+```text
+tools/kernel_corpus/package_release.py
+tests/test_kernel_corpus_package_release.py
+docs/kernel-corpus-install-usage.md
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+pseudoforge_implementation_status.md
+```
+
+Acceptance:
+
+- Package an existing Kernel Corpus pack into split `tar.gz` parts without
+  requiring IDA or the full ntoskrnl corpus in tests.
+- Emit `artifact-manifest.json`, `README-install.md`, and `checksums.sha256`
+  beside the split archive parts.
+- Default generated GitHub CLI commands and manifests to the dedicated
+  `kernullist/kernel-corpus` artifact repository.
+- Validate the required `kernel-pack` component contains `manifest.json` and
+  `corpus.sqlite` before writing payloads.
+- Support optional raw corpus, run log, and extra path components with stable
+  archive names.
+- Keep package output under ignored or external staging roots and out of
+  PseudoForge code releases.
+- Test dry-run behavior, split-volume writes, checksum metadata, missing pack
+  validation, size parsing, and archive extractability with fixture packs.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -1857,7 +1947,10 @@ Test layers:
 19. Answer eval tests for fixture pass, missing citations, degraded canonical
     caveats, unknown-topic live retrieval, stable ordering, bounded reports,
     and default case-manifest coverage.
-20. Optional integration smoke against the real ntoskrnl pack when present.
+20. Release package tests for default artifact repo selection, dry-run behavior,
+    split archive generation, checksum metadata, size parsing, missing pack
+    validation, and extractability.
+21. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -1910,6 +2003,9 @@ Integration tests should skip cleanly when the large corpus path is absent.
   as navigation hints. Require function artifacts before making conclusions.
 - Keep answer eval reports and drafted answers under ignored pack output roots.
   Do not weaken answer harness validation to make eval cases pass.
+- Publish corpus packages through `kernullist/kernel-corpus` release assets.
+  Do not attach generated corpus packs to PseudoForge code releases or commit
+  archive parts into either repository history.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 
