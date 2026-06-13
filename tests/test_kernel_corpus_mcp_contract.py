@@ -11,6 +11,8 @@ from tools.kernel_corpus import builder
 from tools.kernel_corpus.mcp_server import (
     DEFAULT_ANSWER_PLAN_MAX_TOPICS,
     DEFAULT_ATLAS_LIMIT,
+    DEFAULT_CANONICAL_DRIFT_MAX_TOPICS,
+    DEFAULT_CANONICAL_DRIFT_REPORT_CHARS,
     DEFAULT_CANONICAL_MAX_TOPICS,
     DEFAULT_CANONICAL_TEXT_CHARS,
     DEFAULT_LIMIT,
@@ -20,6 +22,8 @@ from tools.kernel_corpus.mcp_server import (
     DEFAULT_PAGE_CHARS,
     MAX_ANSWER_PLAN_TOPICS,
     MAX_ATLAS_LIMIT,
+    MAX_CANONICAL_DRIFT_REPORT_CHARS,
+    MAX_CANONICAL_DRIFT_TOPICS,
     MAX_CANONICAL_TEXT_CHARS,
     MAX_CANONICAL_TOPICS,
     MAX_LIMIT,
@@ -49,6 +53,8 @@ EXPECTED_TOOLS = {
     "get_canonical_quality_report",
     "find_canonical_answers",
     "plan_kernel_answer",
+    "compare_canonical_answers",
+    "get_canonical_drift_report",
 }
 
 
@@ -70,6 +76,8 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             canonical_get_chars = tools["get_canonical_answer"]["inputSchema"]["properties"]["max_chars"]
             canonical_report_chars = tools["get_canonical_quality_report"]["inputSchema"]["properties"]["max_chars"]
             answer_plan_max_topics = tools["plan_kernel_answer"]["inputSchema"]["properties"]["max_topics"]
+            drift_max_topics = tools["compare_canonical_answers"]["inputSchema"]["properties"]["max_topics"]
+            drift_report_chars = tools["get_canonical_drift_report"]["inputSchema"]["properties"]["max_chars"]
             self.assertEqual(DEFAULT_LIMIT, search_limit["default"])
             self.assertEqual(MAX_LIMIT, search_limit["maximum"])
             self.assertEqual(DEFAULT_NEIGHBOR_DEPTH, neighbor_depth["default"])
@@ -90,6 +98,10 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             self.assertEqual(DEFAULT_CANONICAL_TEXT_CHARS, canonical_report_chars["default"])
             self.assertEqual(DEFAULT_ANSWER_PLAN_MAX_TOPICS, answer_plan_max_topics["default"])
             self.assertEqual(MAX_ANSWER_PLAN_TOPICS, answer_plan_max_topics["maximum"])
+            self.assertEqual(DEFAULT_CANONICAL_DRIFT_MAX_TOPICS, drift_max_topics["default"])
+            self.assertEqual(MAX_CANONICAL_DRIFT_TOPICS, drift_max_topics["maximum"])
+            self.assertEqual(DEFAULT_CANONICAL_DRIFT_REPORT_CHARS, drift_report_chars["default"])
+            self.assertEqual(MAX_CANONICAL_DRIFT_REPORT_CHARS, drift_report_chars["maximum"])
 
     def test_corpus_status_returns_stable_json_shape(self) -> None:
         with _built_pack() as pack_root:

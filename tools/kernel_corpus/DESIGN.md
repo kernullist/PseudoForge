@@ -30,6 +30,7 @@ tools/
     builder.py
     canonical_answers.py
     canonical_audit.py
+    canonical_compare.py
     canonical_review_queue.py
     canonical_store.py
     canonical_expectations.json
@@ -143,7 +144,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The implementation is complete through Phase 22:
+The implementation is complete through Phase 23:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -206,6 +207,10 @@ The implementation is complete through Phase 22:
 22. A deterministic answer planner maps natural-language kernel questions to
     canonical candidates, live retrieval steps, citation requirements, and
     stop conditions before an agent drafts prose.
+23. A cross-pack canonical drift comparator explains how canonical topics,
+    selected evidence functions, phase labels, call edges, quality status, and
+    source identity differ between two Kernel Corpus packs without treating EAs
+    as stable cross-build identities.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -373,12 +378,14 @@ list_canonical_answers(pack_root, priority, status, mode, max_topics)
 get_canonical_answer(pack_root, topic_id, include_answer, include_quality, include_gaps, max_chars)
 get_canonical_quality_report(pack_root, priority, status, max_topics, max_chars)
 find_canonical_answers(pack_root, query, priority, status, max_topics)
+plan_kernel_answer(pack_root, question, max_topics, allow_degraded)
+compare_canonical_answers(pack_root_a, pack_root_b, topic_id, priority, max_topics)
+get_canonical_drift_report(pack_root_a, pack_root_b, topic_id, max_chars)
 ```
 
 Optional later tools:
 
 ```text
-compare_lifecycle(pack_root_a, pack_root_b, topic)
 explain_cluster(pack_root, tag)
 find_bridge_functions(pack_root, source_tag, target_tag)
 ```
@@ -752,6 +759,63 @@ plan_kernel_answer(pack_root?, question, max_topics?, allow_degraded?)
 ```
 
 The MCP tool returns compact JSON only and does not generate prose answers.
+
+### Canonical Drift Compare
+
+`tools/kernel_corpus/canonical_compare.py` compares canonical answer artifacts
+and live pack metadata across two pack roots. It emits
+`kernel_corpus_canonical_drift_v1` payloads and treats each pack as read-only.
+
+Inputs:
+
+```text
+--pack-root-a
+--pack-root-b
+--label-a
+--label-b
+--topic
+--priority
+--status
+--max-topics
+--format json|text|markdown
+--report-out
+```
+
+The comparator uses stable cross-build anchors:
+
+- canonical topic id, title, mode, priority, and quality status
+- normalized selected function name
+- selected function role, tag, phase, and artifact path
+- call edges represented as function-name pairs
+- source corpus root, source index path/hash, target path, function count,
+  skipped count, generated time, and schema
+
+EAs are included as build-local evidence only. A same-name/different-EA result
+does not imply a semantic rename by itself; it means the same normalized
+function name resolved to a different address in each pack.
+
+The report surfaces:
+
+- topics present in both packs, missing in A, and missing in B
+- priority, mode, title, quality status, score, validation warning, selected
+  function count, edge count, and gap-count changes
+- selected functions added or removed by normalized name
+- phase assignment changes
+- call-edge additions and removals by function-name pair
+- artifact path pairs for same-name selected functions
+- missing or stale canonical quality files
+
+`--report-out` may write JSON, text, or Markdown outside the compared pack
+roots. It rejects parent traversal and rejects outputs inside either pack root
+so the comparison does not mutate the packs being compared. Generated drift
+reports belong under `pseudoforge_out/` or an external research folder.
+
+The MCP server exposes compact read-only drift helpers:
+
+```text
+compare_canonical_answers(pack_root_a, pack_root_b, topic_id?, priority?, max_topics?)
+get_canonical_drift_report(pack_root_a, pack_root_b, topic_id?, max_chars?)
+```
 
 ## Pack Freshness Validator
 
@@ -1509,6 +1573,40 @@ Acceptance:
 - Test routing, degraded gating, unknown-topic fallback, stable truncation,
   generated plan path safety, and MCP contract behavior.
 
+### Phase 23: Cross-build canonical drift
+
+Deliver:
+
+```text
+tools/kernel_corpus/canonical_compare.py
+tests/test_kernel_corpus_canonical_compare.py
+tests/test_kernel_corpus_mcp_contract.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+tools/kernel_corpus/skills/kernel-corpus-analysis/SKILL.md
+pseudoforge_implementation_status.md
+```
+
+Acceptance:
+
+- Compare one canonical topic across two pack roots without mutating either
+  pack.
+- Compare all topics by priority/topic id with bounded output.
+- Report topics missing on either side.
+- Report priority, mode, title, quality status, score, validation warning,
+  selected-function count, edge count, and gap-count changes.
+- Match selected evidence primarily by normalized function name and explain
+  same-name/different-EA changes as build-local EA drift.
+- Report selected functions added or removed, phase assignment changes, call
+  edge additions/removals by function-name pair, and artifact path pairs.
+- Include both pack source identities and warn on missing or stale canonical
+  quality files.
+- Add compact read-only MCP drift tools.
+- Keep generated drift reports out of Git and reject report outputs inside
+  either compared pack root.
+- Test fixture A/B packs for EA drift, quality drift, missing topics, edge
+  drift, stable truncation, path safety, and MCP contract behavior.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -1538,7 +1636,10 @@ Test layers:
 16. Answer planner tests for Korean routing, canonical quality gates, live
     function search steps, unknown-topic fallback, stable truncation, generated
     plan path safety, and MCP contract behavior.
-17. Optional integration smoke against the real ntoskrnl pack when present.
+17. Canonical drift tests for cross-pack catalog, source identity, selected
+    function, phase, edge, report truncation, path safety, and MCP contract
+    behavior.
+18. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -1576,6 +1677,11 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Treat canonical review decisions as generated operator state. Do not commit
   review queues or decision ledgers, and do not let stale approvals hide source
   identity drift.
+- Use canonical drift compare for build-to-build questions before drafting
+  conclusions. Match functions by normalized name first, and treat EAs as
+  build-local evidence.
+- Do not write drift reports into either compared pack root. Store them under
+  ignored output roots or external corpus workspaces.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 

@@ -34,6 +34,14 @@ from tools.kernel_corpus.canonical_store import (
     get_canonical_quality_report,
     list_canonical_answers,
 )
+from tools.kernel_corpus.canonical_compare import (
+    DEFAULT_MAX_TOPICS as DEFAULT_CANONICAL_DRIFT_MAX_TOPICS,
+    DEFAULT_REPORT_CHARS as DEFAULT_CANONICAL_DRIFT_REPORT_CHARS,
+    MAX_REPORT_CHARS as MAX_CANONICAL_DRIFT_REPORT_CHARS,
+    MAX_TOPICS as MAX_CANONICAL_DRIFT_TOPICS,
+    compare_canonical_answers as compare_canonical_answers_drift,
+    get_canonical_drift_report,
+)
 from tools.kernel_corpus.errors import KernelCorpusError, QueryError
 from tools.kernel_corpus.lifecycle import (
     DEFAULT_DEPTH as DEFAULT_LIFECYCLE_DEPTH,
@@ -330,6 +338,59 @@ class KernelCorpusMcpServer:
                     },
                     schema_version=str(result.get("schema", "")),
                     pack_root=pack_root,
+                    warnings=_coerce_warnings(result),
+                )
+            if name == "compare_canonical_answers":
+                pack_root_a = Path(str(_required(args, "pack_root_a")))
+                pack_root_b = Path(str(_required(args, "pack_root_b")))
+                max_topics = _bounded_limit(args.get("max_topics"), DEFAULT_CANONICAL_DRIFT_MAX_TOPICS, MAX_CANONICAL_DRIFT_TOPICS)
+                result = compare_canonical_answers_drift(
+                    pack_root_a,
+                    pack_root_b,
+                    topic_id=str(args.get("topic_id", "") or ""),
+                    priority=str(args.get("priority", "") or ""),
+                    max_topics=max_topics,
+                )
+                return self._ok(
+                    {
+                        "pack_a": result.get("pack_a", {}),
+                        "pack_b": result.get("pack_b", {}),
+                        "source_identity": result.get("source_identity", {}),
+                        "catalog_summary": result.get("catalog_summary", {}),
+                        "topic_count": result.get("topic_count", 0),
+                        "returned_count": result.get("returned_count", 0),
+                        "topics_truncated": bool(result.get("topics_truncated", False)),
+                        "topics": result.get("topics", []),
+                    },
+                    schema_version=str(result.get("schema", "")),
+                    pack_root=pack_root_a,
+                    warnings=_coerce_warnings(result),
+                )
+            if name == "get_canonical_drift_report":
+                pack_root_a = Path(str(_required(args, "pack_root_a")))
+                pack_root_b = Path(str(_required(args, "pack_root_b")))
+                max_chars = _bounded_limit(
+                    args.get("max_chars"),
+                    DEFAULT_CANONICAL_DRIFT_REPORT_CHARS,
+                    MAX_CANONICAL_DRIFT_REPORT_CHARS,
+                )
+                result = get_canonical_drift_report(
+                    pack_root_a,
+                    pack_root_b,
+                    topic_id=str(args.get("topic_id", "") or ""),
+                    max_chars=max_chars,
+                )
+                return self._ok(
+                    {
+                        "pack_root_a": result.get("pack_root_a", ""),
+                        "pack_root_b": result.get("pack_root_b", ""),
+                        "topic_id": result.get("topic_id", ""),
+                        "markdown": result.get("markdown", ""),
+                        "max_chars": result.get("max_chars", max_chars),
+                        "truncated": bool(result.get("truncated", False)),
+                    },
+                    schema_version=str(result.get("schema", "")),
+                    pack_root=pack_root_a,
                     warnings=_coerce_warnings(result),
                 )
             return self._error("Unknown tool: %s" % name, error_type="UnknownTool")
@@ -802,6 +863,47 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "maximum": MAX_ANSWER_PLAN_TOPICS,
                 },
                 "allow_degraded": {"type": "boolean", "default": False},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "compare_canonical_answers",
+        "description": "Compare canonical answer catalog and selected evidence drift between two Kernel Corpus pack roots.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["pack_root_a", "pack_root_b"],
+            "properties": {
+                "pack_root_a": {"type": "string"},
+                "pack_root_b": {"type": "string"},
+                "topic_id": {"type": "string", "default": ""},
+                "priority": {"type": "string", "enum": ["", "P0", "P1", "P2"], "default": ""},
+                "max_topics": {
+                    "type": "integer",
+                    "default": DEFAULT_CANONICAL_DRIFT_MAX_TOPICS,
+                    "minimum": 1,
+                    "maximum": MAX_CANONICAL_DRIFT_TOPICS,
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_canonical_drift_report",
+        "description": "Return a bounded Markdown drift report for canonical answers across two Kernel Corpus pack roots.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["pack_root_a", "pack_root_b"],
+            "properties": {
+                "pack_root_a": {"type": "string"},
+                "pack_root_b": {"type": "string"},
+                "topic_id": {"type": "string", "default": ""},
+                "max_chars": {
+                    "type": "integer",
+                    "default": DEFAULT_CANONICAL_DRIFT_REPORT_CHARS,
+                    "minimum": 1,
+                    "maximum": MAX_CANONICAL_DRIFT_REPORT_CHARS,
+                },
             },
             "additionalProperties": False,
         },

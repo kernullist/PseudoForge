@@ -618,6 +618,82 @@ Treat the plan as a retrieval contract. Draft the answer only after executing
 or inspecting the recommended canonical, lifecycle, function, neighbor, atlas,
 or evidence-pack steps.
 
+## Compare Canonical Drift
+
+Use the canonical drift comparator when you need to explain what changed
+between two Windows kernel builds or two revisions of the same Kernel Corpus
+pack. The comparator is deterministic and read-only for both pack roots. It
+compares topic catalogs, canonical quality metadata, selected evidence
+functions, phase assignments, and call edges by normalized function name.
+
+Do not compare EAs as stable cross-build identity. EAs are reported only as
+build-local evidence attached to the same function name.
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_compare.py `
+  --pack-root-a "F:\pseudoforge-corpora\ntoskrnl-old" `
+  --pack-root-b "F:\pseudoforge-corpora\ntoskrnl-new" `
+  --label-a old `
+  --label-b new `
+  --topic process_object_lifecycle `
+  --format markdown `
+  --report-out "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\drift\process_object_lifecycle.md"
+```
+
+The report schema is:
+
+```text
+kernel_corpus_canonical_drift_v1
+```
+
+The comparator reports:
+
+- topics present in both packs, missing in A, and missing in B
+- priority, mode, title, quality status, score, validation-warning, selected
+  function count, edge count, and gap-count changes
+- same normalized function name with different build-local EA
+- selected functions added or removed
+- lifecycle/focused phase assignment changes
+- call-edge additions and removals by function-name pair
+- artifact path pairs for same-name selected functions
+- source identity for each pack: target path, source corpus root, source index
+  path/hash, function count, skipped count, generated time, and schema
+
+The comparator warns when canonical quality reports are missing or when a
+canonical topic's source hash or pack generation time does not match its pack
+manifest.
+
+MCP equivalents:
+
+```json
+{
+  "name": "compare_canonical_answers",
+  "arguments": {
+    "pack_root_a": "F:\\pseudoforge-corpora\\ntoskrnl-old",
+    "pack_root_b": "F:\\pseudoforge-corpora\\ntoskrnl-new",
+    "topic_id": "process_object_lifecycle",
+    "max_topics": 5
+  }
+}
+```
+
+```json
+{
+  "name": "get_canonical_drift_report",
+  "arguments": {
+    "pack_root_a": "F:\\pseudoforge-corpora\\ntoskrnl-old",
+    "pack_root_b": "F:\\pseudoforge-corpora\\ntoskrnl-new",
+    "topic_id": "process_object_lifecycle",
+    "max_chars": 12000
+  }
+}
+```
+
+Generated drift reports should live under `pseudoforge_out/` or an external
+research folder. The comparator rejects report paths inside either compared
+pack root so it does not mutate the packs being compared. Do not commit drift
+reports.
+
 ## Trace Lifecycles
 
 Trace a process object lifecycle:
@@ -909,6 +985,13 @@ Implemented tools:
 - `generate_atlas`
 - `list_atlas_pages`
 - `get_atlas_page`
+- `list_canonical_answers`
+- `get_canonical_answer`
+- `get_canonical_quality_report`
+- `find_canonical_answers`
+- `plan_kernel_answer`
+- `compare_canonical_answers`
+- `get_canonical_drift_report`
 
 The server returns compact JSON with EAs, function names, artifact paths,
 selection reasons, warnings, and bounded excerpts. It should not return large
@@ -1051,6 +1134,7 @@ python -B -m pytest `
   tests/test_kernel_corpus_vector_recall.py `
   tests/test_kernel_corpus_canonical_answers.py `
   tests/test_kernel_corpus_canonical_audit.py `
+  tests/test_kernel_corpus_canonical_compare.py `
   tests/test_kernel_corpus_canonical_review_queue.py `
   tests/test_kernel_corpus_answer_planner.py
 ```
@@ -1083,5 +1167,10 @@ git diff --check -- .
   edge coverage, validation warnings, stale source identity, and tuning actions.
 - Planner selected no canonical topic: follow the live retrieval steps and
   state that canonical coverage was unavailable or not quality-eligible.
+- Canonical drift report shows same-name different-EA changes: treat the EA as
+  build-local evidence, not a cross-build identity mismatch by itself.
+- Canonical drift warnings mention missing or stale quality files: regenerate
+  or audit canonical answers for that pack before using the topic as approved
+  evidence.
 - Very broad answers: build or inspect an evidence pack first, then answer from
   the pack instead of scanning the full corpus ad hoc.
