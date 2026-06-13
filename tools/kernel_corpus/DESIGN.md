@@ -1158,9 +1158,13 @@ Operational rules:
 4. The generated `artifact-manifest.json` records source pack identity, source
    index hash, function counts, PseudoForge commit, selected release repo, and
    install path examples.
-5. `checksums.sha256` covers the manifest, install README, and every split
+5. Release packages are relocation-safe by default: the helper stages a
+   temporary `kernel-pack` copy and rewrites JSON, Markdown, manifest
+   `sqlite_path`, and SQLite `corpus_manifest` pack-root metadata for
+   `<install-root>\<artifact-id>\kernel-pack` before archiving.
+6. `checksums.sha256` covers the manifest, install README, and every split
    archive part.
-6. PseudoForge release zips must not include these corpus packages. The
+7. PseudoForge release zips must not include these corpus packages. The
    `kernel-corpus` repository release is the artifact registry.
 
 ## Performance And Scale
@@ -1904,10 +1908,13 @@ Acceptance:
   `corpus.sqlite` before writing payloads.
 - Support optional raw corpus, run log, and extra path components with stable
   archive names.
+- Rewrite release-pack metadata for the expected install root without mutating
+  the source pack.
 - Keep package output under ignored or external staging roots and out of
   PseudoForge code releases.
 - Test dry-run behavior, split-volume writes, checksum metadata, missing pack
-  validation, size parsing, and archive extractability with fixture packs.
+  validation, size parsing, relocation-safe derived metadata, and archive
+  extractability with fixture packs.
 
 ## Testing Strategy
 

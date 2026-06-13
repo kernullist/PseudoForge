@@ -8,7 +8,9 @@ import unittest
 from pathlib import Path
 
 from tools.kernel_corpus import builder
+from tools.kernel_corpus.atlas import generate_atlas
 from tools.kernel_corpus.errors import KernelCorpusError
+from tools.kernel_corpus.lifecycle import trace_lifecycle
 from tools.kernel_corpus.package_release import (
     CHECKSUMS_NAME,
     DEFAULT_GITHUB_REPO,
@@ -19,6 +21,7 @@ from tools.kernel_corpus.package_release import (
     package_release,
     parse_size,
 )
+from tools.kernel_corpus.validate_pack import validate_pack
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "kernel_corpus" / "minimal"
@@ -30,13 +33,24 @@ class KernelCorpusPackageReleaseTests(unittest.TestCase):
             temp_root = Path(temp_dir)
             pack_root = temp_root / "pack"
             builder.build_pack(FIXTURE_ROOT, pack_root)
+            trace_lifecycle(
+                pack_root,
+                "process_object",
+                max_seeds=8,
+                depth=1,
+                output_path=pack_root / "evidence-packs" / "process_object.json",
+            )
+            generate_atlas(pack_root, pack_root / "reports" / "atlas", limit=8)
             output_dir = temp_root / "release"
+            install_root = (temp_root / "install-root").resolve(strict=False)
+            install_pack_root = install_root / "ntoskrnl-test-r1" / "kernel-pack"
 
             result = package_release(
                 pack_root=pack_root,
                 artifact_id="ntoskrnl-test-r1",
                 output_dir=output_dir,
                 source_corpus_root=FIXTURE_ROOT,
+                install_root=install_root,
                 volume_size="1m",
                 pseudoforge_commit="test-commit",
             )
@@ -55,18 +69,20 @@ class KernelCorpusPackageReleaseTests(unittest.TestCase):
             self.assertGreaterEqual(len(archive_parts), 1)
             self.assertIn("gh release create ntoskrnl-test-r1", result["release_command"])
             self.assertIn("--repo %s" % DEFAULT_GITHUB_REPO, result["release_command"])
+            self.assertIn("README-install.md", result["release_command"])
             self.assertIn("New-Item -ItemType Directory -Force $InstallRoot | Out-Null", result["install_commands"])
             self.assertIn('cmd /c copy /b "ntoskrnl-test-r1.tar.gz.*" "ntoskrnl-test-r1.tar.gz"', result["install_commands"])
+            self.assertTrue(result["relocation"]["enabled"])
+            self.assertGreater(result["relocation"]["text_files_rewritten"], 0)
+            self.assertGreater(result["relocation"]["sqlite_rows_rewritten"], 0)
 
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(SCHEMA, manifest["schema"])
             self.assertEqual("ntoskrnl-test-r1", manifest["artifact_id"])
             self.assertEqual(DEFAULT_GITHUB_REPO, manifest["github_repo"])
             self.assertEqual("test-commit", manifest["source"]["pseudoforge_commit"])
-            self.assertEqual(
-                "F:\\pseudoforge-corpora\\ntoskrnl-test-r1\\kernel-pack",
-                manifest["install"]["pack_root_after_extract"],
-            )
+            self.assertEqual(str(install_pack_root), manifest["install"]["pack_root_after_extract"])
+            self.assertEqual(str(install_pack_root), manifest["relocation"]["pack_root_after_extract"])
             self.assertEqual(["kernel-pack", "raw-corpus"], [item["name"] for item in manifest["components"]])
 
             checksum_text = checksums_path.read_text(encoding="utf-8")
@@ -80,11 +96,17 @@ class KernelCorpusPackageReleaseTests(unittest.TestCase):
             archive_blob = b"".join(path.read_bytes() for path in archive_parts)
             with tarfile.open(fileobj=io.BytesIO(archive_blob), mode="r:gz") as archive:
                 names = set(archive.getnames())
+                archive.extractall(install_root)
             self.assertIn("ntoskrnl-test-r1/%s" % MANIFEST_NAME, names)
             self.assertIn("ntoskrnl-test-r1/%s" % README_NAME, names)
             self.assertIn("ntoskrnl-test-r1/kernel-pack/manifest.json", names)
             self.assertIn("ntoskrnl-test-r1/kernel-pack/corpus.sqlite", names)
             self.assertIn("ntoskrnl-test-r1/raw-corpus/pseudoforge-corpus-index.json", names)
+
+            extracted_manifest = json.loads((install_pack_root / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(str(install_pack_root / "corpus.sqlite"), extracted_manifest["sqlite_path"])
+            validation = validate_pack(install_pack_root, include_derived=True)
+            self.assertTrue(validation["ok"], validation["issues"])
 
     def test_package_release_dry_run_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

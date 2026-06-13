@@ -4,9 +4,12 @@ import argparse
 import gzip
 import hashlib
 import json
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tarfile
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,9 +26,11 @@ SCHEMA = "kernel_corpus_release_package_v1"
 DEFAULT_GITHUB_REPO = "kernullist/kernel-corpus"
 DEFAULT_VOLUME_SIZE = "1900m"
 DEFAULT_OUTPUT_DIR = "release/kernel-corpus"
+DEFAULT_INSTALL_ROOT = r"F:\pseudoforge-corpora"
 README_NAME = "README-install.md"
 MANIFEST_NAME = "artifact-manifest.json"
 CHECKSUMS_NAME = "checksums.sha256"
+RELOCATABLE_TEXT_SUFFIXES = {".json", ".md", ".txt"}
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             compression_level=args.compression_level,
             github_repo=args.github_repo,
             pseudoforge_commit=args.pseudoforge_commit,
+            install_root=args.install_root,
+            relocate_pack=not args.no_relocate_pack,
             dry_run=args.dry_run,
         )
     except (OSError, KernelCorpusError, ValueError) as exc:
@@ -71,86 +78,139 @@ def package_release(
     compression_level: int = 6,
     github_repo: str = DEFAULT_GITHUB_REPO,
     pseudoforge_commit: str = "",
+    install_root: str | Path = DEFAULT_INSTALL_ROOT,
+    relocate_pack: bool = True,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     artifact = _validate_artifact_id(artifact_id)
     pack = Path(pack_root).resolve()
     out_dir = _resolve_output_dir(output_dir).resolve() / artifact
+    install = _resolve_install_root(install_root)
+    install_pack_root = install / artifact / "kernel-pack"
     volume_bytes = parse_size(volume_size)
     if volume_bytes < 1024 * 1024:
         raise KernelCorpusError("Volume size must be at least 1 MiB: %s" % volume_size)
     if compression_level < 0 or compression_level > 9:
         raise KernelCorpusError("Compression level must be between 0 and 9.")
 
-    components = _components(pack, source_corpus_root, run_log_root, extra_paths or [])
-    _validate_components(components)
+    source_components = _components(pack, source_corpus_root, run_log_root, extra_paths or [])
+    _validate_components(source_components)
     pack_manifest = _read_pack_manifest(pack)
     commit = pseudoforge_commit or _git_commit(ROOT)
-    component_summaries = [_component_summary(component) for component in components]
     archive_base = out_dir / ("%s.tar.gz" % artifact)
-    manifest = _artifact_manifest(
-        artifact,
-        pack,
-        out_dir,
-        pack_manifest,
-        component_summaries,
-        volume_size,
-        volume_bytes,
-        compression_level,
-        commit,
-        github_repo,
-    )
-    readme = _install_readme(artifact, github_repo)
+    relocation = _relocation_plan(pack, install, install_pack_root, relocate_pack)
 
     if dry_run:
+        component_summaries = _component_summaries(
+            source_components,
+            original_pack_root=pack,
+            install_pack_root=install_pack_root,
+            relocate_pack=relocate_pack,
+        )
+        manifest = _artifact_manifest(
+            artifact,
+            pack,
+            out_dir,
+            pack_manifest,
+            component_summaries,
+            volume_size,
+            volume_bytes,
+            compression_level,
+            commit,
+            github_repo,
+            install,
+            install_pack_root,
+            relocation,
+        )
         return {
             "schema": SCHEMA,
             "dry_run": True,
             "artifact_id": artifact,
             "output_dir": str(out_dir),
             "archive_base": str(archive_base),
-            "component_count": len(components),
+            "component_count": len(source_components),
             "components": component_summaries,
+            "relocation": relocation,
             "volume_size_bytes": volume_bytes,
             "files": [],
             "release_command": _release_command(artifact, github_repo, out_dir),
-            "install_commands": _install_commands(artifact),
-            "install_command": " ; ".join(_install_commands(artifact)),
+            "install_commands": _install_commands(artifact, install),
+            "install_command": " ; ".join(_install_commands(artifact, install)),
+            "artifact_manifest": manifest,
         }
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = out_dir / MANIFEST_NAME
-    readme_path = out_dir / README_NAME
-    checksums_path = out_dir / CHECKSUMS_NAME
-    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    readme_path.write_text(readme, encoding="utf-8")
+    staging_context: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        components = source_components
+        if relocate_pack:
+            staging_context = tempfile.TemporaryDirectory(
+                prefix="%s-staging-" % artifact,
+                dir=str(out_dir.parent),
+            )
+            staging_pack = Path(staging_context.name) / artifact / "kernel-pack"
+            relocation.update(_stage_relocated_pack(pack, staging_pack, install_pack_root))
+            components = _components(staging_pack, source_corpus_root, run_log_root, extra_paths or [])
+            _validate_components(components)
 
-    archive_parts = _write_split_tar_gz(
-        archive_base,
-        artifact,
-        components,
-        manifest_path,
-        readme_path,
-        volume_bytes,
-        compression_level,
-    )
-    checksum_entries = _write_checksums(checksums_path, [manifest_path, readme_path] + archive_parts)
-    files = [_file_payload(path) for path in [manifest_path, readme_path, checksums_path] + archive_parts]
-    return {
-        "schema": SCHEMA,
-        "dry_run": False,
-        "artifact_id": artifact,
-        "output_dir": str(out_dir),
-        "archive_base": str(archive_base),
-        "component_count": len(components),
-        "components": component_summaries,
-        "volume_size_bytes": volume_bytes,
-        "files": files,
-        "checksums": checksum_entries,
-        "release_command": _release_command(artifact, github_repo, out_dir),
-        "install_commands": _install_commands(artifact),
-        "install_command": " ; ".join(_install_commands(artifact)),
-    }
+        component_summaries = _component_summaries(
+            components,
+            original_pack_root=pack,
+            install_pack_root=install_pack_root,
+            relocate_pack=relocate_pack,
+        )
+        manifest = _artifact_manifest(
+            artifact,
+            pack,
+            out_dir,
+            pack_manifest,
+            component_summaries,
+            volume_size,
+            volume_bytes,
+            compression_level,
+            commit,
+            github_repo,
+            install,
+            install_pack_root,
+            relocation,
+        )
+        readme = _install_readme(artifact, github_repo, install)
+        manifest_path = out_dir / MANIFEST_NAME
+        readme_path = out_dir / README_NAME
+        checksums_path = out_dir / CHECKSUMS_NAME
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+        readme_path.write_text(readme, encoding="utf-8")
+
+        archive_parts = _write_split_tar_gz(
+            archive_base,
+            artifact,
+            components,
+            manifest_path,
+            readme_path,
+            volume_bytes,
+            compression_level,
+        )
+        checksum_entries = _write_checksums(checksums_path, [manifest_path, readme_path] + archive_parts)
+        files = [_file_payload(path) for path in [manifest_path, readme_path, checksums_path] + archive_parts]
+        return {
+            "schema": SCHEMA,
+            "dry_run": False,
+            "artifact_id": artifact,
+            "output_dir": str(out_dir),
+            "archive_base": str(archive_base),
+            "component_count": len(components),
+            "components": component_summaries,
+            "relocation": relocation,
+            "volume_size_bytes": volume_bytes,
+            "files": files,
+            "checksums": checksum_entries,
+            "release_command": _release_command(artifact, github_repo, out_dir),
+            "install_commands": _install_commands(artifact, install),
+            "install_command": " ; ".join(_install_commands(artifact, install)),
+        }
+    finally:
+        if staging_context is not None:
+            staging_context.cleanup()
 
 
 def parse_size(text: str) -> int:
@@ -188,6 +248,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--extra-path", action="append", default=[], help="Optional extra file or directory to include. May repeat.")
     parser.add_argument("--volume-size", default=DEFAULT_VOLUME_SIZE, help="Split volume size, such as 1900m.")
     parser.add_argument("--compression-level", type=int, default=6, help="gzip compression level 0..9.")
+    parser.add_argument(
+        "--install-root",
+        default=DEFAULT_INSTALL_ROOT,
+        help="Install root used for relocation-safe metadata. Default: %s." % DEFAULT_INSTALL_ROOT,
+    )
+    parser.add_argument(
+        "--no-relocate-pack",
+        action="store_true",
+        help="Archive the pack as-is without rewriting pack-root metadata for the install root.",
+    )
     parser.add_argument(
         "--github-repo",
         default=DEFAULT_GITHUB_REPO,
@@ -251,6 +321,9 @@ def _artifact_manifest(
     compression_level: int,
     pseudoforge_commit: str,
     github_repo: str,
+    install_root: Path,
+    install_pack_root: Path,
+    relocation: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
@@ -279,16 +352,34 @@ def _artifact_manifest(
         },
         "output_dir": str(output_dir),
         "components": components,
+        "relocation": relocation,
         "install": {
-            "extract_root_example": "F:\\pseudoforge-corpora",
-            "pack_root_after_extract": "F:\\pseudoforge-corpora\\%s\\kernel-pack" % artifact_id,
+            "extract_root_example": str(install_root),
+            "pack_root_after_extract": str(install_pack_root),
             "mcp_config_command": (
                 'python -B .\\tools\\kernel_corpus\\install_wiring.py mcp-config '
-                '--pack-root "F:\\pseudoforge-corpora\\%s\\kernel-pack"'
+                '--pack-root "%s"'
             )
-            % artifact_id,
+            % install_pack_root,
         },
     }
+
+
+def _component_summaries(
+    components: list[Component],
+    *,
+    original_pack_root: Path,
+    install_pack_root: Path,
+    relocate_pack: bool,
+) -> list[dict[str, Any]]:
+    summaries = []
+    for component in components:
+        summary = _component_summary(component)
+        if component.name == "kernel-pack" and relocate_pack:
+            summary["source_path"] = str(original_pack_root)
+            summary["relocated_pack_root"] = str(install_pack_root)
+        summaries.append(summary)
+    return summaries
 
 
 def _component_summary(component: Component) -> dict[str, Any]:
@@ -311,8 +402,9 @@ def _component_summary(component: Component) -> dict[str, Any]:
     }
 
 
-def _install_readme(artifact_id: str, github_repo: str) -> str:
+def _install_readme(artifact_id: str, github_repo: str, install_root: Path) -> str:
     repo_arg = " --repo %s" % github_repo if github_repo else ""
+    pack_root_after_extract = install_root / artifact_id / "kernel-pack"
     return "\n".join(
         [
             "# Kernel Corpus Release %s" % artifact_id,
@@ -339,14 +431,18 @@ def _install_readme(artifact_id: str, github_repo: str) -> str:
             "",
             "```powershell",
             "Set-Location .\\%s" % artifact_id,
-            *_install_commands(artifact_id),
+            *_install_commands(artifact_id, install_root),
             "```",
             "",
             "Expected pack root after extraction:",
             "",
             "```text",
-            "F:\\pseudoforge-corpora\\%s\\kernel-pack" % artifact_id,
+            str(pack_root_after_extract),
             "```",
+            "",
+            "The packaged kernel-pack metadata is prepared for this expected",
+            "pack root. If you extract to a different install root, regenerate",
+            "derived artifacts or repackage with `--install-root`.",
             "",
             "## Configure MCP",
             "",
@@ -354,8 +450,8 @@ def _install_readme(artifact_id: str, github_repo: str) -> str:
             "`mcpServers` block plus Claude Code and Codex client snippets.",
             "",
             "```powershell",
-            'python -B .\\tools\\kernel_corpus\\install_wiring.py mcp-config --pack-root "F:\\pseudoforge-corpora\\%s\\kernel-pack"'
-            % artifact_id,
+            'python -B .\\tools\\kernel_corpus\\install_wiring.py mcp-config --pack-root "%s"'
+            % pack_root_after_extract,
             "```",
             "",
             "Claude Code can use the emitted `clientSnippets.claudeCode.addCommand`.",
@@ -366,9 +462,9 @@ def _install_readme(artifact_id: str, github_repo: str) -> str:
     )
 
 
-def _install_commands(artifact_id: str) -> list[str]:
+def _install_commands(artifact_id: str, install_root: Path) -> list[str]:
     return [
-        '$InstallRoot = "F:\\pseudoforge-corpora"',
+        '$InstallRoot = "%s"' % install_root,
         "New-Item -ItemType Directory -Force $InstallRoot | Out-Null",
         'cmd /c copy /b "%s.tar.gz.*" "%s.tar.gz"' % (artifact_id, artifact_id),
         'tar -xzf "%s.tar.gz" -C $InstallRoot' % artifact_id,
@@ -445,7 +541,7 @@ def _release_command(artifact_id: str, github_repo: str, output_dir: Path) -> st
     repo_arg = " --repo %s" % github_repo if github_repo else ""
     return (
         'gh release create %s%s --title "Kernel Corpus %s" '
-        '--notes-file "%s" "%s" "%s" "%s"'
+        '--notes-file "%s" "%s" "%s" "%s" "%s"'
     ) % (
         artifact_id,
         repo_arg,
@@ -454,6 +550,7 @@ def _release_command(artifact_id: str, github_repo: str, output_dir: Path) -> st
         output_dir / (artifact_id + ".tar.gz.*"),
         output_dir / MANIFEST_NAME,
         output_dir / CHECKSUMS_NAME,
+        output_dir / README_NAME,
     )
 
 
@@ -462,6 +559,98 @@ def _resolve_output_dir(path: str | Path) -> Path:
     if item.is_absolute():
         return item
     return ROOT / item
+
+
+def _resolve_install_root(path: str | Path) -> Path:
+    return Path(path).resolve(strict=False)
+
+
+def _relocation_plan(
+    source_pack_root: Path,
+    install_root: Path,
+    install_pack_root: Path,
+    enabled: bool,
+) -> dict[str, Any]:
+    return {
+        "enabled": bool(enabled),
+        "source_pack_root": str(source_pack_root),
+        "install_root": str(install_root),
+        "pack_root_after_extract": str(install_pack_root),
+        "text_files_rewritten": 0,
+        "sqlite_rows_rewritten": 0,
+    }
+
+
+def _stage_relocated_pack(
+    source_pack_root: Path,
+    staging_pack_root: Path,
+    install_pack_root: Path,
+) -> dict[str, Any]:
+    if staging_pack_root.exists():
+        raise KernelCorpusError("Staging pack root already exists: %s" % staging_pack_root)
+    staging_pack_root.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_pack_root, staging_pack_root)
+    text_files = _rewrite_text_paths(staging_pack_root, source_pack_root, install_pack_root)
+    sqlite_rows = _rewrite_sqlite_manifest(staging_pack_root / "corpus.sqlite", source_pack_root, install_pack_root)
+    return {
+        "staging_pack_root": str(staging_pack_root),
+        "text_files_rewritten": text_files,
+        "sqlite_rows_rewritten": sqlite_rows,
+    }
+
+
+def _rewrite_text_paths(pack_root: Path, source_pack_root: Path, install_pack_root: Path) -> int:
+    replacements = _path_replacements(source_pack_root, install_pack_root)
+    changed_count = 0
+    for path in pack_root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in RELOCATABLE_TEXT_SUFFIXES:
+            continue
+        try:
+            original = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        updated = original
+        for old, new in replacements:
+            updated = updated.replace(old, new)
+        if updated != original:
+            path.write_text(updated, encoding="utf-8", newline="\n")
+            changed_count += 1
+    return changed_count
+
+
+def _rewrite_sqlite_manifest(sqlite_path: Path, source_pack_root: Path, install_pack_root: Path) -> int:
+    replacements = _path_replacements(source_pack_root, install_pack_root)
+    changed_count = 0
+    connection = sqlite3.connect(sqlite_path)
+    try:
+        rows = connection.execute("select key, value from corpus_manifest").fetchall()
+        for key, value in rows:
+            updated = str(value)
+            for old, new in replacements:
+                updated = updated.replace(old, new)
+            if key == "sqlite_path":
+                updated = str(install_pack_root / "corpus.sqlite")
+            if updated != value:
+                connection.execute(
+                    "update corpus_manifest set value = ? where key = ?",
+                    (updated, key),
+                )
+                changed_count += 1
+        connection.commit()
+    finally:
+        connection.close()
+    return changed_count
+
+
+def _path_replacements(source_pack_root: Path, install_pack_root: Path) -> list[tuple[str, str]]:
+    source = str(source_pack_root)
+    target = str(install_pack_root)
+    replacements = [(source, target)]
+    escaped_source = source.replace("\\", "\\\\")
+    escaped_target = target.replace("\\", "\\\\")
+    if escaped_source != source:
+        replacements.append((escaped_source, escaped_target))
+    return replacements
 
 
 def _validate_artifact_id(value: str) -> str:

@@ -1374,8 +1374,20 @@ python -B .\tools\kernel_corpus\package_release.py `
   --artifact-id ntoskrnl-26200.8457-amd64-r1 `
   --output-dir "F:\kernel-corpus-release-staging" `
   --github-repo kernullist/kernel-corpus `
+  --install-root "F:\pseudoforge-corpora" `
   --volume-size 1900m
 ```
+
+The helper is relocation-safe by default. It archives a temporary staged copy
+of `kernel-pack` whose JSON, Markdown, manifest `sqlite_path`, and SQLite
+`corpus_manifest` pack-root references are rewritten for:
+
+```text
+<install-root>\<artifact-id>\kernel-pack
+```
+
+Keep this default for public releases. Use `--no-relocate-pack` only for local
+debug packages that must preserve the source pack's absolute paths.
 
 Upload the generated assets:
 
@@ -1386,7 +1398,8 @@ gh release create ntoskrnl-26200.8457-amd64-r1 `
   --notes-file "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\README-install.md" `
   "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\ntoskrnl-26200.8457-amd64-r1.tar.gz.*" `
   "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\artifact-manifest.json" `
-  "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\checksums.sha256"
+  "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\checksums.sha256" `
+  "F:\kernel-corpus-release-staging\ntoskrnl-26200.8457-amd64-r1\README-install.md"
 ```
 
 Install a release package by downloading all assets, comparing hashes with

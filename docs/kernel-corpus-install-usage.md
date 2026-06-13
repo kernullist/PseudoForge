@@ -168,6 +168,7 @@ $ArtifactRepo = "kernullist/kernel-corpus"
 $ArtifactId = "ntoskrnl-26200.8457-amd64-r1"
 $CorpusRoot = "F:\kernullist\analysis-ouput\ntoskrnl"
 $PackRoot = "F:\pseudoforge-corpora\ntoskrnl-26200.8457"
+$InstallRoot = "F:\pseudoforge-corpora"
 $ReleaseOut = "F:\kernel-corpus-release-staging"
 Set-Location $Repo
 
@@ -177,8 +178,17 @@ python -B .\tools\kernel_corpus\package_release.py `
   --artifact-id $ArtifactId `
   --output-dir $ReleaseOut `
   --github-repo $ArtifactRepo `
+  --install-root $InstallRoot `
   --volume-size 1900m
 ```
+
+By default the package helper stages a temporary copy of `kernel-pack` and
+rewrites pack-root metadata for
+`$InstallRoot\$ArtifactId\kernel-pack` before archiving. This keeps derived
+evidence packs, atlas pages, answer plans, manifest `sqlite_path`, and SQLite
+`corpus_manifest` rows consistent after a user extracts the release package.
+Use `--no-relocate-pack` only when intentionally archiving the pack with its
+current absolute paths.
 
 Preview without writing files:
 
@@ -188,6 +198,7 @@ python -B .\tools\kernel_corpus\package_release.py `
   --artifact-id $ArtifactId `
   --output-dir $ReleaseOut `
   --github-repo $ArtifactRepo `
+  --install-root $InstallRoot `
   --dry-run
 ```
 
@@ -200,7 +211,8 @@ gh release create $ArtifactId `
   --notes-file "$ReleaseOut\$ArtifactId\README-install.md" `
   "$ReleaseOut\$ArtifactId\$ArtifactId.tar.gz.*" `
   "$ReleaseOut\$ArtifactId\artifact-manifest.json" `
-  "$ReleaseOut\$ArtifactId\checksums.sha256"
+  "$ReleaseOut\$ArtifactId\checksums.sha256" `
+  "$ReleaseOut\$ArtifactId\README-install.md"
 ```
 
 GitHub Release assets in `kernullist/kernel-corpus` are the distribution
