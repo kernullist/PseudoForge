@@ -29,6 +29,7 @@ tools/
     builder.py
     canonical_answers.py
     canonical_audit.py
+    canonical_review_queue.py
     canonical_store.py
     canonical_expectations.json
     canonical_topics.json
@@ -141,7 +142,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The implementation is complete through Phase 20:
+The implementation is complete through Phase 21:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -198,6 +199,9 @@ The implementation is complete through Phase 20:
 20. The agent workflow now treats canonical answers as a first evidence layer
     only after freshness and quality checks, with an explicit pass/degraded/fail
     and stale-artifact decision matrix in the skill and runbook.
+21. Canonical answer production review queues summarize generated topics by
+    audit quality and human review decision state without mutating source code
+    or generated decision ledgers.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -673,6 +677,33 @@ The workflow is intentionally conservative. Canonical artifacts guide the
 answer, but fresh corpus evidence from `get_function`, `get_neighbors`,
 `search_functions`, or `trace_lifecycle` wins when it contradicts a generated
 draft.
+
+`tools/kernel_corpus/canonical_review_queue.py` turns a generated canonical
+answer tree into an operator queue. It reads topic manifests, quality reports,
+validation reports, evidence packs, and an optional
+`<canonical-root>\review-decisions.json` ledger. It emits
+`kernel_corpus_canonical_review_queue_v1` payloads with pack identity, source
+identity, quality status, validation warning count, gap count, selected major
+functions, important artifact paths, review decision state, stale-decision
+flags, and suggested review actions.
+
+Queue ordering is deterministic and review-debt oriented: priority first,
+then quality status, higher validation warning count, lower quality score, and
+topic id.
+
+The review queue is read-only by default. `--report-out` writes bounded
+generated reports under the canonical root:
+
+```text
+<canonical-root>\review-queue.json
+<canonical-root>\review-queue.md
+```
+
+The optional decision ledger has schema
+`kernel_corpus_canonical_review_decisions_v1` and supports `approved`,
+`needs_review`, `rejected`, and `superseded`. A generated pass is never treated
+as human approval. Approved decisions become stale when their recorded source
+hash or pack generation time no longer matches the topic artifact.
 
 ## Pack Freshness Validator
 
@@ -1364,6 +1395,41 @@ Acceptance:
 - Tests lock the workflow phrases and decision matrix without requiring a full
   ntoskrnl pack.
 
+### Phase 21: Canonical production review queue
+
+Deliver:
+
+```text
+tools/kernel_corpus/canonical_review_queue.py
+tests/test_kernel_corpus_canonical_review_queue.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+pseudoforge_implementation_status.md
+```
+
+Acceptance:
+
+- Generate stable JSON, text, and Markdown review queues from
+  `<pack-root>\canonical-answers`.
+- Support `--pack-root`, optional `--canonical-root`, `--priority`,
+  `--status`, `--max-topics`, `--format`, `--report-out`, and
+  `--decision-file`.
+- Include pack identity, canonical root, source target identity, topic
+  metadata, quality status, score, validation warning count, gap count,
+  selected major functions, artifact paths, review decision state, and
+  suggested review action.
+- Keep queue output bounded and deterministic.
+- Keep decision ledgers generated and read-only from the queue tool.
+- Support `approved`, `needs_review`, `rejected`, and `superseded` decisions.
+- Never treat generated audit pass status as human approval.
+- Keep stale or mismatched source identity visible, including stale approved
+  decisions.
+- Reject canonical roots, decision files, and report outputs outside the
+  canonical output tree.
+- Test pass/degraded/fail/missing topics, missing quality files, decision
+  merge ordering, stale approval visibility, Markdown grouping, report writes,
+  and path escape rejection.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -1388,7 +1454,9 @@ Test layers:
 13. Canonical audit expectation, P2 filtering/order, report, and
     scoring-regression tests.
 14. Skill and runbook workflow text tests for canonical-answer decision rules.
-15. Optional integration smoke against the real ntoskrnl pack when present.
+15. Canonical production review queue tests for quality grouping, decision
+    ledger merge, stale approval visibility, report rendering, and path safety.
+16. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -1421,6 +1489,9 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Treat passing canonical answers as first evidence layer only. Degraded,
   failed, missing, or stale canonical states must drive caveats, live
   retrieval, regeneration, or tuning before final answers.
+- Treat canonical review decisions as generated operator state. Do not commit
+  review queues or decision ledgers, and do not let stale approvals hide source
+  identity drift.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 

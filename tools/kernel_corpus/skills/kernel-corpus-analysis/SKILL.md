@@ -97,6 +97,10 @@ Decision matrix:
 | canonical missing + fresh pack | Run live retrieval or generate the missing topic bundle. |
 | canonical present + stale pack | Rebuild or warn before use; stale canonical artifacts do not override fresh corpus evidence. |
 
+If a review queue exists, prefer topics with `review_state == approved` and
+`quality.status == pass`. Treat pass without approval as generated but
+unreviewed, not as human-reviewed truth. Treat stale approvals as review debt.
+
 Canonical answers never override fresher function artifacts. If live retrieval contradicts a canonical draft, cite the fresh evidence and call out the canonical artifact as stale, degraded, or needing regeneration.
 
 ## Evidence Discipline

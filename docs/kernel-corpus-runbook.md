@@ -484,6 +484,79 @@ When preparing a model prompt manually, pass canonical answer excerpts only as
 explicit canonical context, not as unquestioned truth. Preserve the answer
 contract: claim -> EA -> function name -> artifact path -> inference level.
 
+## Review Canonical Answer Production Queue
+
+Use the review queue when the canonical catalog is too large to inspect topic
+directories one by one. The queue is deterministic and read-only by default:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_review_queue.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --format markdown `
+  --report-out "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\canonical-answers\review-queue.md"
+
+python -B .\tools\kernel_corpus\canonical_review_queue.py `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --status degraded `
+  --format json
+```
+
+Default generated report paths:
+
+```text
+<canonical-root>\review-queue.json
+<canonical-root>\review-queue.md
+```
+
+The queue separates:
+
+- failing topics
+- degraded topics
+- missing-quality topics
+- passing but unreviewed topics
+- approved topics
+- stale review decisions
+
+Within those groups, the queue keeps review debt near the top by sorting on
+priority, quality status, higher validation warning count, lower quality score,
+and topic id.
+
+`quality.status == pass` is not human approval. Human promotion is tracked by
+an optional generated decision ledger:
+
+```text
+<canonical-root>\review-decisions.json
+```
+
+Decision ledger schema:
+
+```json
+{
+  "schema": "kernel_corpus_canonical_review_decisions_v1",
+  "decisions": [
+    {
+      "topic_id": "process_object_lifecycle",
+      "decision": "approved",
+      "reviewer": "analyst",
+      "reviewed_at": "2026-06-13T00:00:00Z",
+      "source_index_sha256": "<pack-source-index-hash>",
+      "pack_generated_at": "<pack-generated-at>",
+      "notes": "Reviewed candidate list, gaps, and quality report."
+    }
+  ]
+}
+```
+
+Supported decisions are `approved`, `needs_review`, `rejected`, and
+`superseded`. A stale `approved` decision is not treated as approved when the
+topic source hash or pack generation time changes. The queue reports it as a
+stale decision with `re_review_source_changed`.
+
+The review queue does not write or mutate `review-decisions.json`. Operators
+edit or generate that ledger separately, keep it under the ignored canonical
+root, and rerun the queue. Reports and decision ledgers are generated state;
+do not commit them.
+
 ## Trace Lifecycles
 
 Trace a process object lifecycle:
@@ -916,7 +989,8 @@ python -B -m pytest `
   tests/test_kernel_corpus_perf_profile.py `
   tests/test_kernel_corpus_vector_recall.py `
   tests/test_kernel_corpus_canonical_answers.py `
-  tests/test_kernel_corpus_canonical_audit.py
+  tests/test_kernel_corpus_canonical_audit.py `
+  tests/test_kernel_corpus_canonical_review_queue.py
 ```
 
 For documentation-only edits, also run:
