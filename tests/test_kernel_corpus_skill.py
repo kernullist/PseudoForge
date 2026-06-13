@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 SKILL_PATH = Path(__file__).resolve().parents[1] / "tools" / "kernel_corpus" / "skills" / "kernel-corpus-analysis" / "SKILL.md"
+RUNBOOK_PATH = Path(__file__).resolve().parents[1] / "docs" / "kernel-corpus-runbook.md"
 
 
 class KernelCorpusSkillTests(unittest.TestCase):
@@ -44,6 +45,39 @@ class KernelCorpusSkillTests(unittest.TestCase):
         self.assertIn("module_image", text)
         self.assertIn("IOCTL/디스패치", text)
         self.assertIn("콜백/노티파이", text)
+
+    def test_skill_documents_canonical_answer_workflow(self) -> None:
+        text = SKILL_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("## Canonical Answer Workflow", text)
+        self.assertIn("Validate pack freshness before trusting canonical artifacts", text)
+        self.assertIn("find_canonical_answers", text)
+        self.assertIn("list_canonical_answers", text)
+        self.assertIn("quality.status == pass", text)
+        self.assertIn("Inspect `quality.md` and `gaps.md`", text)
+        self.assertIn("verify high-impact claims and fill gaps", text)
+        self.assertIn("canonical topic id, EA, function name, and artifact path", text)
+        self.assertIn("canonical pass + fresh pack", text)
+        self.assertIn("canonical degraded + fresh pack", text)
+        self.assertIn("canonical fail + fresh pack", text)
+        self.assertIn("canonical missing + fresh pack", text)
+        self.assertIn("canonical present + stale pack", text)
+        self.assertIn("stale canonical artifacts do not override fresh corpus evidence", text)
+
+    def test_runbook_documents_canonical_operator_decision_matrix(self) -> None:
+        text = RUNBOOK_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("## Answer From Canonical Artifacts", text)
+        self.assertIn("Operator decision matrix", text)
+        self.assertIn("canonical pass + fresh pack", text)
+        self.assertIn("canonical degraded + fresh pack", text)
+        self.assertIn("canonical fail + fresh pack", text)
+        self.assertIn("canonical missing + fresh pack", text)
+        self.assertIn("canonical present + stale pack", text)
+        self.assertIn("Rerun live lifecycle/search when", text)
+        self.assertIn("Regenerate stale bundles after rebuilding a pack", text)
+        self.assertIn("stale canonical artifacts never override fresh corpus evidence", text)
+        self.assertIn("claim -> EA -> function name -> artifact path -> inference level", text)
 
     def test_skill_does_not_embed_private_corpus_data(self) -> None:
         text = SKILL_PATH.read_text(encoding="utf-8")

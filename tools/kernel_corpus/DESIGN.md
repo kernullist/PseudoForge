@@ -141,7 +141,7 @@ debugging, portability, and handoff to other agents.
 
 ### Current v1 status
 
-The implementation is complete through Phase 19:
+The implementation is complete through Phase 20:
 
 1. Pack builder imports PseudoForge corpus indexes into SQLite.
 2. Query CLI exposes status, search, function lookup, neighbor traversal,
@@ -195,6 +195,9 @@ The implementation is complete through Phase 19:
     local `canonical_store.py` helper, so agents can list, find, inspect, and
     quality-check generated canonical answers before falling back to live
     retrieval.
+20. The agent workflow now treats canonical answers as a first evidence layer
+    only after freshness and quality checks, with an explicit pass/degraded/fail
+    and stale-artifact decision matrix in the skill and runbook.
 
 Generated packs and reports remain intentionally outside Git.
 
@@ -655,6 +658,21 @@ and returned text is bounded by `max_chars`. Agents should prefer canonical
 topics with `quality.status == pass` and zero validation warnings, inspect
 degraded topics only with caveats, and use live search/function/neighborhood or
 lifecycle tools for verification and gap filling.
+
+Canonical answer workflow decision matrix:
+
+| State | Action |
+| --- | --- |
+| canonical pass + fresh pack | Use as first evidence layer, inspect quality and gaps, then verify high-impact claims. |
+| canonical degraded + fresh pack | Use only with explicit caveats and live verification of gaps. |
+| canonical fail + fresh pack | Do not use as final-answer evidence; use only as tuning or retrieval hints. |
+| canonical missing + fresh pack | Run live retrieval or generate the missing topic bundle. |
+| canonical present + stale pack | Rebuild or warn before use; stale artifacts do not override fresh corpus evidence. |
+
+The workflow is intentionally conservative. Canonical artifacts guide the
+answer, but fresh corpus evidence from `get_function`, `get_neighbors`,
+`search_functions`, or `trace_lifecycle` wins when it contradicts a generated
+draft.
 
 ## Pack Freshness Validator
 
@@ -1295,6 +1313,57 @@ Acceptance:
 - Keep generated P2 answer bundles and quality reports under ignored output
   roots.
 
+### Phase 19: Canonical answer MCP tools
+
+Deliver:
+
+```text
+tools/kernel_corpus/canonical_store.py
+tools/kernel_corpus/mcp_server.py
+tests/test_kernel_corpus_mcp_contract.py
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+```
+
+Acceptance:
+
+- Expose read-only `list_canonical_answers`, `get_canonical_answer`,
+  `get_canonical_quality_report`, and `find_canonical_answers` MCP tools.
+- Return absolute artifact paths and bounded Markdown/text payloads.
+- Reject topic-id traversal and index-provided directories outside the
+  canonical root.
+- Preserve default MCP pack-root behavior.
+- Keep missing canonical roots inspectable through warnings.
+- Cover fixture canonical trees, filtering, ordering, truncation, and path
+  safety with tests.
+
+### Phase 20: Agent workflow canonical answer integration
+
+Deliver:
+
+```text
+tools/kernel_corpus/skills/kernel-corpus-analysis/SKILL.md
+docs/kernel-corpus-runbook.md
+tools/kernel_corpus/DESIGN.md
+pseudoforge_implementation_status.md
+tests/test_kernel_corpus_skill.py
+```
+
+Acceptance:
+
+- Skill instructions require freshness validation before trusting canonical
+  artifacts.
+- Agents find/list canonical answers for broad lifecycle, subsystem, and
+  security-engineering questions before live retrieval.
+- Passing canonical answers are first evidence layer only, not final truth.
+- Degraded answers require caveats and live verification.
+- Failed answers are diagnostic hints, not final-answer evidence.
+- Missing canonical answers trigger live retrieval or explicit bundle
+  generation.
+- Stale canonical artifacts require rebuild or warning before use.
+- Tests lock the workflow phrases and decision matrix without requiring a full
+  ntoskrnl pack.
+
 ## Testing Strategy
 
 Use small fixture corpora for unit tests. Do not require the full ntoskrnl
@@ -1318,7 +1387,8 @@ Test layers:
 12. Canonical answer manifest, P2 priority, and fixture-generation tests.
 13. Canonical audit expectation, P2 filtering/order, report, and
     scoring-regression tests.
-14. Optional integration smoke against the real ntoskrnl pack when present.
+14. Skill and runbook workflow text tests for canonical-answer decision rules.
+15. Optional integration smoke against the real ntoskrnl pack when present.
 
 Integration tests should skip cleanly when the large corpus path is absent.
 
@@ -1348,6 +1418,9 @@ Integration tests should skip cleanly when the large corpus path is absent.
 - Treat canonical quality audit as candidate-quality lint, not expert review.
   Use `quality.md` to decide which retrieval expectations, seeds, tags, or
   ontology phases need tuning.
+- Treat passing canonical answers as first evidence layer only. Degraded,
+  failed, missing, or stale canonical states must drive caveats, live
+  retrieval, regeneration, or tuning before final answers.
 - Avoid model-generated persistent facts unless they are tied to evidence pack
   IDs and source corpus hashes.
 

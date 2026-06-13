@@ -76,6 +76,29 @@ python -B .\tools\kernel_corpus\canonical_store.py get --pack-root "<pack-root>"
 - Freshness checks: use `validate_pack.py` before reusing older pack roots, lifecycle evidence packs, or atlas pages. Treat validator errors as stop-and-rebuild signals.
 - Durable handoff or review: call the local answer harness to generate the bounded prompt and validate the drafted Markdown answer.
 
+## Canonical Answer Workflow
+
+Use canonical answers as the first evidence layer only after freshness and quality checks:
+
+1. Validate pack freshness before trusting canonical artifacts.
+2. Call `find_canonical_answers` for natural-language questions, or `list_canonical_answers` when filtering by priority, mode, or quality status.
+3. Prefer canonical answers with `quality.status == pass` and zero validation warnings.
+4. Inspect `quality.md` and `gaps.md` before making polished claims.
+5. Use live retrieval with `search_functions`, `get_function`, `get_neighbors`, or `trace_lifecycle` to verify high-impact claims and fill gaps.
+6. Cite canonical topic id, EA, function name, and artifact path for important claims.
+
+Decision matrix:
+
+| State | Action |
+| --- | --- |
+| canonical pass + fresh pack | Use as first evidence layer, then verify high-impact claims. |
+| canonical degraded + fresh pack | Use only with explicit caveats and live verification of gaps. |
+| canonical fail + fresh pack | Do not use as final-answer evidence; use only as a tuning or retrieval hint. |
+| canonical missing + fresh pack | Run live retrieval or generate the missing topic bundle. |
+| canonical present + stale pack | Rebuild or warn before use; stale canonical artifacts do not override fresh corpus evidence. |
+
+Canonical answers never override fresher function artifacts. If live retrieval contradicts a canonical draft, cite the fresh evidence and call out the canonical artifact as stale, degraded, or needing regeneration.
+
 ## Evidence Discipline
 
 - Cite EA, function name, and artifact path for important claims.

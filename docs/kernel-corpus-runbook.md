@@ -382,7 +382,7 @@ P2 audit fail=0
 P2 answer validation warnings=0
 ```
 
-## Use Canonical Answers Through MCP
+## Answer From Canonical Artifacts
 
 When canonical answer artifacts exist, agents should inspect them before
 running broad live retrieval. The MCP server exposes these read-only tools:
@@ -442,6 +442,47 @@ python -B .\tools\kernel_corpus\canonical_store.py report `
 The helper and MCP tools only read files under `<pack-root>\canonical-answers`.
 Topic ids are identifiers, not paths, and returned Markdown is bounded by
 `max_chars`.
+
+Operator decision matrix:
+
+| State | Operator action |
+| --- | --- |
+| canonical pass + fresh pack | Use the answer as the first evidence layer, inspect `quality.md` and `gaps.md`, then verify high-impact claims against live function artifacts. |
+| canonical degraded + fresh pack | Use only with explicit caveats; inspect gaps and rerun live search, `get_function`, `get_neighbors`, or `trace_lifecycle` before finalizing. |
+| canonical fail + fresh pack | Do not use as final answer material; treat it as a tuning hint for expectations, seeds, tags, or retrieval ranking. |
+| canonical missing + fresh pack | Run live retrieval immediately, or generate the missing topic bundle with `canonical_answers.py build`. |
+| canonical present + stale pack | Rebuild the pack or regenerate canonical bundles before use; stale canonical artifacts never override fresh corpus evidence. |
+
+Rerun live lifecycle/search when:
+
+- `quality.status` is `degraded` or `fail`
+- `validation_warning_count` is nonzero
+- `gaps.md` lists missing seeds, weak edges, skipped functions, or ambiguous
+  phase assignments
+- the user asks outside the canonical topic boundary
+- the freshness validator reports stale pack or derived-artifact state
+- `get_function` or `get_neighbors` shows fresher evidence that contradicts
+  the canonical draft
+
+Regenerate stale bundles after rebuilding a pack:
+
+```powershell
+python -B .\tools\kernel_corpus\canonical_answers.py build `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --priority P0 `
+  --priority P1 `
+  --priority P2 `
+  --force
+
+python -B .\tools\kernel_corpus\canonical_audit.py `
+  --canonical-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\canonical-answers" `
+  --format text `
+  --report-out "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl\canonical-answers\quality-report.json"
+```
+
+When preparing a model prompt manually, pass canonical answer excerpts only as
+explicit canonical context, not as unquestioned truth. Preserve the answer
+contract: claim -> EA -> function name -> artifact path -> inference level.
 
 ## Trace Lifecycles
 
