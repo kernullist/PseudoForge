@@ -341,7 +341,7 @@ def _artifact_manifest(
         "source": {
             "pack_root": str(pack_root),
             "pseudoforge_commit": pseudoforge_commit,
-            "pack_schema": str(pack_manifest.get("schema", "")),
+            "pack_schema": str(pack_manifest.get("pack_schema", "")),
             "target_path": str(pack_manifest.get("target_path", "")),
             "source_corpus_root": str(pack_manifest.get("source_corpus_root", "")),
             "source_index_sha256": str(pack_manifest.get("source_index_sha256", "")),

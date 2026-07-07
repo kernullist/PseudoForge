@@ -21,6 +21,7 @@ from tools.kernel_corpus.package_release import (
     package_release,
     parse_size,
 )
+from tools.kernel_corpus.schema import PACK_SCHEMA_VERSION
 from tools.kernel_corpus.validate_pack import validate_pack
 
 
@@ -81,6 +82,7 @@ class KernelCorpusPackageReleaseTests(unittest.TestCase):
             self.assertEqual("ntoskrnl-test-r1", manifest["artifact_id"])
             self.assertEqual(DEFAULT_GITHUB_REPO, manifest["github_repo"])
             self.assertEqual("test-commit", manifest["source"]["pseudoforge_commit"])
+            self.assertEqual(PACK_SCHEMA_VERSION, manifest["source"]["pack_schema"])
             self.assertEqual(str(install_pack_root), manifest["install"]["pack_root_after_extract"])
             self.assertIn("relocate_pack.py", manifest["install"]["relocate_command"])
             self.assertIn("--include-derived", manifest["install"]["relocate_command"])
