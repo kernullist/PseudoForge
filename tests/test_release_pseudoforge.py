@@ -52,12 +52,13 @@ class ReleasePseudoForgeTests(unittest.TestCase):
             self.assertIn("pseudoforge.py", names)
             self.assertIn("ida-plugin.json", names)
             self.assertIn("ida_pseudoforge/version.py", names)
+            self.assertIn("tools/kernel_corpus/mcp_server.py", names)
             self.assertIn("README.md", names)
             self.assertNotIn("ida_pseudoforge/__pycache__/ignored.pyc", names)
             self.assertNotIn("tests/not_packaged.py", names)
             self.assertNotIn("tools/not_packaged.py", names)
 
-    def test_current_release_package_contains_runtime_domain_profiles_without_tools(self):
+    def test_current_release_package_contains_runtime_domain_profiles_and_mcp_tools(self):
         repo_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -91,8 +92,13 @@ class ReleasePseudoForgeTests(unittest.TestCase):
             self.assertIn("ida_pseudoforge/profiles/contracts/cxx_runtime_contracts.json", names)
             self.assertIn("ida_pseudoforge/profiles/contracts/uefi_api_contracts.json", names)
             self.assertIn("ida_pseudoforge/profiles/contracts/macos_macho_api_contracts.json", names)
+            self.assertIn("tools/kernel_corpus/mcp_server.py", names)
+            self.assertIn("tools/kernel_corpus/query.py", names)
+            self.assertIn("tools/kernel_corpus/store.py", names)
+            self.assertIn("tools/kernel_corpus/schema.py", names)
+            self.assertIn("tools/kernel_corpus/skills/kernel-corpus-analysis/SKILL.md", names)
             self.assertGreater(len(domain_profiles), 0)
-            self.assertFalse(any(name.startswith("tools/") for name in names))
+            self.assertFalse(any(name.startswith("tools/") and not name.startswith("tools/kernel_corpus/") for name in names))
             self.assertFalse(any(name.startswith("tests/") for name in names))
             self.assertFalse(
                 any(name.startswith("tests/fixtures/general_binaries/") for name in names)
@@ -127,7 +133,8 @@ class ReleasePseudoForgeTests(unittest.TestCase):
         self.assertTrue(smoke["type_corrected_signature"])
         self.assertTrue(smoke["type_corrected_body_cast_removed"])
         self.assertFalse(smoke["type_correction_apply_to_idb"])
-        self.assertEqual([], smoke["tools_modules"])
+        self.assertIn("tools.kernel_corpus.schema", smoke["tools_modules"])
+        self.assertEqual("kernel_corpus_pack_v2", smoke["kernel_corpus_pack_schema"])
 
     def test_prepare_release_no_version_bump_packages_current_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -177,6 +184,7 @@ def _run_packaged_runtime_smoke(package_root: Path) -> dict[str, object]:
         from ida_pseudoforge.core.lvar_analysis import build_clean_plan
         from ida_pseudoforge.core.render import render_cleaned_pseudocode
         from ida_pseudoforge.profiles import loader as profile_loader
+        from tools.kernel_corpus.schema import PACK_SCHEMA_VERSION
 
         domain_profiles_available = domain_identity_profiles_available()
         io_manager_metadata = profile_loader.subsystem_identity_metadata("windows.io_manager.delete_device")
@@ -239,6 +247,7 @@ def _run_packaged_runtime_smoke(package_root: Path) -> dict[str, object]:
                     "type_correction_count": len(plan.type_corrections),
                     "type_correction_profile": type_correction.profile_id if type_correction else "",
                     "tools_modules": tools_modules,
+                    "kernel_corpus_pack_schema": PACK_SCHEMA_VERSION,
                 },
                 sort_keys=True,
             )
@@ -293,8 +302,13 @@ def _write_minimal_repo(root: Path, version: str) -> Path:
     tools_dir = root / "tools"
     tests_dir.mkdir()
     tools_dir.mkdir()
+    kernel_corpus_dir = tools_dir / "kernel_corpus"
+    kernel_corpus_dir.mkdir()
     (tests_dir / "not_packaged.py").write_text("", encoding="utf-8")
     (tools_dir / "not_packaged.py").write_text("", encoding="utf-8")
+    (kernel_corpus_dir / "__init__.py").write_text("", encoding="utf-8")
+    (kernel_corpus_dir / "mcp_server.py").write_text("", encoding="utf-8")
+    (kernel_corpus_dir / "schema.py").write_text('PACK_SCHEMA_VERSION = "kernel_corpus_pack_v2"\n', encoding="utf-8")
     return root
 
 

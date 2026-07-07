@@ -92,7 +92,7 @@ Key documentation:
 
 ## Versioning
 
-Current plugin version: `0.1.7`.
+Current plugin version: `0.1.8`.
 
 The runtime version source is `ida_pseudoforge/version.py`. The `ida-plugin.json` manifest version must match it; the unit suite enforces this parity so plugin packaging and runtime reporting do not drift.
 
@@ -117,9 +117,9 @@ The default archive path is:
 release\PseudoForge-<new-version>.zip
 ```
 
-Kernel Corpus data packages are not included in PseudoForge plugin releases.
-Publish and install large corpus artifacts through the dedicated
-`kernullist/kernel-corpus` GitHub Release channel.
+Kernel Corpus MCP tooling is included in PseudoForge plugin releases, but large
+Kernel Corpus data packages are not. Publish and install corpus artifacts
+through the dedicated `kernullist/kernel-corpus` GitHub Release channel.
 
 Useful release options:
 

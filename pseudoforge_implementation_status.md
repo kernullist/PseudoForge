@@ -1,6 +1,6 @@
 # PseudoForge Implementation Status
 
-Current plugin version: `0.1.7`.
+Current plugin version: `0.1.8`.
 
 ## Current MVP
 
@@ -109,7 +109,7 @@ Implemented in this folder:
    - cleaned pseudocode preview in an IDA custom viewer
    - aggregate `.forge` file beside the analyzed binary, with one replaceable section per function EA
    - runtime version is shown in `Show settings`, CLI `--version`, preview/export headers, switch outlines, `.forge` sections, and IDA Free JSON reports
-   - `tools/release_pseudoforge.py` bumps the plugin version and writes `release/PseudoForge-<version>.zip`
+   - `tools/release_pseudoforge.py` bumps the plugin version and writes `release/PseudoForge-<version>.zip`; the archive includes Kernel Corpus MCP tooling but not large corpus data packages
    - aggregate `.forge` storage finalizes path-like string literals before writing
    - path-like C/C++ string literal finalization lives in
      `ida_pseudoforge/core/render_literals.py` while preserving the public

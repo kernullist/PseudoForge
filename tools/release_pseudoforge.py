@@ -17,6 +17,7 @@ PACKAGE_ENTRIES = (
     Path("pseudoforge.py"),
     Path("ida-plugin.json"),
     Path("ida_pseudoforge"),
+    Path("tools/kernel_corpus"),
     Path("README.md"),
 )
 SKIPPED_DIR_NAMES = {"__pycache__", ".pytest_cache"}

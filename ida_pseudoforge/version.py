@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 PLUGIN_NAME = "PseudoForge"
-VERSION = "0.1.7"
+VERSION = "0.1.8"
 __version__ = VERSION
 
 
