@@ -246,8 +246,20 @@ function Remove-GeneratedPath
 
     $resolvedTarget = (Resolve-Path -LiteralPath $Target).Path
     $resolvedRoot = (Resolve-Path -LiteralPath $AllowedRoot).Path
-    $relative = [System.IO.Path]::GetRelativePath($resolvedRoot, $resolvedTarget)
-    if ($relative.StartsWith("..") -or [System.IO.Path]::IsPathRooted($relative))
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    $altSeparator = [System.IO.Path]::AltDirectorySeparatorChar
+    $trimChars = [char[]]@($separator, $altSeparator)
+    $normalizedTarget = $resolvedTarget.TrimEnd($trimChars)
+    $normalizedRoot = $resolvedRoot.TrimEnd($trimChars)
+    $rootPrefix = $normalizedRoot + $separator
+    $comparison = [System.StringComparison]::OrdinalIgnoreCase
+
+    if ([string]::Equals($normalizedTarget, $normalizedRoot, $comparison))
+    {
+        throw "Refusing to remove the work root itself: $resolvedTarget"
+    }
+
+    if (-not $normalizedTarget.StartsWith($rootPrefix, $comparison))
     {
         throw "Refusing to remove path outside work root: $resolvedTarget"
     }
