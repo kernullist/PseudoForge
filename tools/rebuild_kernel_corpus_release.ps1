@@ -278,7 +278,7 @@ function Write-ReleaseNotes
 
     $path = Join-Path $OutputDir "RELEASE_NOTES.md"
     $lines = @(
-        "# " + $ResolvedArtifactId,
+        "# $ResolvedArtifactId",
         "",
         "- Rebuilt from IDB: ``$IdbPath``",
         "- Kernel pack: ``$ResolvedPackRoot``",
