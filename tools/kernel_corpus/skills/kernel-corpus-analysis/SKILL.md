@@ -100,9 +100,9 @@ python -B .\tools\kernel_corpus\knowledge_graph.py function-topics --pack-root "
 - Canonical answer questions: call `find_canonical_answers` for the user's wording, then `get_canonical_answer` for the best passing topic. Inspect `quality.md` and `gaps.md`; use degraded topics only with caveats, and use failed topics only as retrieval hints. Cite the canonical topic id alongside EA, function name, and artifact path.
 - Broad natural-language questions: call `plan_kernel_answer` and follow its selected canonical candidates, live retrieval steps, citation contract, and stop conditions before drafting. The planner does not generate final prose.
 - Lifecycle questions: call `trace_lifecycle` first with `topic` such as `process_object`, `thread_object`, `file_object`, `driver_object`, `device_object`, `registry_key`, `section_object`, or `module_image`, then inspect high-impact functions with `get_function`, and use `get_neighbors` for ambiguous transitions.
-- Function questions: use `search_functions` or exact EA lookup with `get_function`; then cite cleaned/raw/summary artifact paths.
+- Function questions: use `search_functions` or exact EA lookup with `get_function`; request disassembly when pseudocode precision matters, inspect data refs, then cite cleaned/raw/disassembly/summary artifact paths.
 - Subsystem questions: generate or inspect atlas pages first when available; then search by names, tags, imports, and strings; expand nearby callers/callees; build an evidence pack for broad answers.
-- Import/string questions: use `search_by_import` or `search_by_string`, then verify with `get_function`.
+- Import/string/data-reference questions: use `search_by_import`, `search_by_string`, or `search_by_data_ref`, then verify with `get_function`.
 - Broad answers: prefer a passing canonical answer when available, then call `build_evidence_pack` or `trace_lifecycle` for verification, gap filling, or unsupported topic boundaries.
 - Freshness checks: use `validate_pack.py` before reusing older pack roots, lifecycle evidence packs, or atlas pages. Treat validator errors as stop-and-rebuild signals.
 - Durable handoff or review: call the local answer harness to generate the bounded prompt and validate the drafted Markdown answer. For repeatable workflow regression, run `answer_eval.py` against the pack and drafted answers.
@@ -207,10 +207,10 @@ Identity:
 - EA, name, tags, mode, artifact paths.
 
 What this function appears to do:
-- Evidence-backed summary from cleaned/raw/summary artifacts.
+- Evidence-backed summary from cleaned/raw/disassembly/summary artifacts and data refs.
 
-Callgraph/import/string evidence:
-- Direct callers/callees, imports, strings, and why they matter.
+Callgraph/import/string/data-reference evidence:
+- Direct callers/callees, imports, strings, data refs, and why they matter.
 
 Confidence:
 - Confirmed evidence vs inference, including warnings or missing artifacts.
@@ -243,5 +243,5 @@ Atlas hub lists are filtered retrieval hints. Generic helpers and subsystem-unre
 
 - Do not copy generated ntoskrnl data into this skill.
 - Do not rely on memory or generic Windows behavior when corpus evidence is available.
-- Do not treat cleaned pseudocode as perfect; inspect raw/summary artifacts when precision matters.
+- Do not treat cleaned pseudocode as perfect; inspect raw, summary, and full-function disassembly artifacts when precision matters.
 - Do not hide uncertainty. A useful kernel answer can say "unknown from this corpus" and propose the next retrieval.

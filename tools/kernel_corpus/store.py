@@ -41,10 +41,12 @@ def create_schema(connection: sqlite3.Connection) -> bool:
             cleaned_path TEXT,
             raw_path TEXT,
             diff_path TEXT,
+            disasm_path TEXT,
             mode TEXT,
             llm_status TEXT,
             warning_count INTEGER NOT NULL DEFAULT 0,
             buffer_contract_count INTEGER NOT NULL DEFAULT 0,
+            data_ref_count INTEGER NOT NULL DEFAULT 0,
             cleaned_excerpt TEXT
         );
 
@@ -71,6 +73,18 @@ def create_schema(connection: sqlite3.Connection) -> bool:
             string_value TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS function_data_refs (
+            ea TEXT NOT NULL,
+            source_ea TEXT NOT NULL,
+            target_ea TEXT NOT NULL,
+            target_name TEXT NOT NULL DEFAULT '',
+            segment TEXT NOT NULL DEFAULT '',
+            ref_kind TEXT NOT NULL DEFAULT '',
+            value TEXT NOT NULL DEFAULT '',
+            source_text TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (ea, source_ea, target_ea, ref_kind, target_name, value)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_functions_name_ea
             ON functions(name, ea);
 
@@ -85,6 +99,15 @@ def create_schema(connection: sqlite3.Connection) -> bool:
 
         CREATE INDEX IF NOT EXISTS idx_function_strings_ea_value
             ON function_strings(ea, string_value);
+
+        CREATE INDEX IF NOT EXISTS idx_function_data_refs_ea_target
+            ON function_data_refs(ea, target_ea);
+
+        CREATE INDEX IF NOT EXISTS idx_function_data_refs_target_name
+            ON function_data_refs(target_name, ea);
+
+        CREATE INDEX IF NOT EXISTS idx_function_data_refs_value
+            ON function_data_refs(value, ea);
         """
     )
     fts5_enabled = sqlite_supports_fts5(connection)
@@ -149,6 +172,7 @@ def import_index(
             terms = [str(item) for item in _coerce_list(function.get("terms")) if str(item)]
             imports = _import_names(function)
             strings = _string_values(function)
+            data_refs = _data_ref_records(function, ea)
             interesting_lines = [str(item) for item in _coerce_list(function.get("interesting_lines")) if str(item)]
             counts = _coerce_dict(function.get("counts"))
             cleaned_excerpt = str(function.get("cleaned_excerpt", "") or "")[:max_excerpt]
@@ -157,15 +181,17 @@ def import_index(
             cleaned_path = _resolve_path_string(corpus_path, str(artifacts.get("cleaned_pseudocode", "") or ""))
             raw_path = _resolve_path_string(corpus_path, str(artifacts.get("raw_pseudocode", "") or ""))
             diff_path = _resolve_path_string(corpus_path, str(artifacts.get("raw_vs_cleaned_diff", "") or ""))
+            disasm_path = _resolve_path_string(corpus_path, str(artifacts.get("disassembly", "") or ""))
+            data_ref_count = int(counts.get("data_refs", len(data_refs)) or len(data_refs))
 
             connection.execute(
                 """
                 INSERT OR REPLACE INTO functions(
                     ea, name, directory, summary_path, cleaned_path, raw_path,
-                    diff_path, mode, llm_status, warning_count,
-                    buffer_contract_count, cleaned_excerpt
+                    diff_path, disasm_path, mode, llm_status, warning_count,
+                    buffer_contract_count, data_ref_count, cleaned_excerpt
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     ea,
@@ -175,10 +201,12 @@ def import_index(
                     cleaned_path,
                     raw_path,
                     diff_path,
+                    disasm_path,
                     str(function.get("mode", "") or ""),
                     str(function.get("llm_status", "") or ""),
                     int(counts.get("warnings", 0) or 0),
                     int(counts.get("buffer_contracts", 0) or 0),
+                    data_ref_count,
                     cleaned_excerpt,
                 ),
             )
@@ -186,6 +214,7 @@ def import_index(
             _insert_edges(connection, ea, function)
             _insert_values(connection, "function_imports", "import_name", ea, imports)
             _insert_values(connection, "function_strings", "string_value", ea, strings)
+            _insert_data_refs(connection, ea, data_refs)
             if fts5_enabled:
                 connection.execute(
                     """
@@ -217,6 +246,7 @@ def import_index(
         "edge_count": _table_count(connection, "call_edges"),
         "import_count": _table_count(connection, "function_imports"),
         "string_count": _table_count(connection, "function_strings"),
+        "data_ref_count": _table_count(connection, "function_data_refs"),
         "fts_row_count": _table_count(connection, "function_fts") if fts5_enabled else 0,
     }
 
@@ -232,6 +262,7 @@ def _table_count(connection: sqlite3.Connection, table: str) -> int:
 def _clear_import_tables(connection: sqlite3.Connection, fts5_enabled: bool) -> None:
     for table in (
         "function_strings",
+        "function_data_refs",
         "function_imports",
         "call_edges",
         "function_tags",
@@ -294,6 +325,36 @@ def _insert_values(connection: sqlite3.Connection, table: str, column: str, ea: 
     return len(rows)
 
 
+def _insert_data_refs(connection: sqlite3.Connection, ea: str, records: list[dict[str, str]]) -> int:
+    rows = [
+        (
+            ea,
+            record.get("source_ea", ""),
+            record.get("target_ea", ""),
+            record.get("target_name", ""),
+            record.get("segment", ""),
+            record.get("ref_kind", ""),
+            record.get("value", ""),
+            record.get("source_text", ""),
+        )
+        for record in records
+        if record.get("target_ea")
+    ]
+    if not rows:
+        return 0
+    connection.executemany(
+        """
+        INSERT OR IGNORE INTO function_data_refs(
+            ea, source_ea, target_ea, target_name, segment,
+            ref_kind, value, source_text
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
+    return len(rows)
+
+
 def _import_names(function: dict[str, Any]) -> list[str]:
     result = []
     for item in _coerce_list(function.get("imports_called")):
@@ -315,6 +376,33 @@ def _string_values(function: dict[str, Any]) -> list[str]:
             value = str(item or "")
         if value:
             result.append(value)
+    return result
+
+
+def _data_ref_records(function: dict[str, Any], function_ea: str) -> list[dict[str, str]]:
+    result = []
+    for item in _coerce_list(function.get("data_refs")):
+        if not isinstance(item, dict):
+            continue
+        try:
+            target_ea = normalize_ea(item.get("target_ea", ""))
+        except (TypeError, ValueError):
+            continue
+        try:
+            source_ea = normalize_ea(item.get("source_ea", function_ea))
+        except (TypeError, ValueError):
+            source_ea = function_ea
+        result.append(
+            {
+                "source_ea": source_ea,
+                "target_ea": target_ea,
+                "target_name": str(item.get("target_name", "") or ""),
+                "segment": str(item.get("segment", "") or ""),
+                "ref_kind": str(item.get("ref_kind", "") or ""),
+                "value": str(item.get("value", "") or ""),
+                "source_text": str(item.get("source_text", "") or "")[:512],
+            }
+        )
     return result
 
 

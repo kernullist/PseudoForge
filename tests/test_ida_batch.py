@@ -108,6 +108,40 @@ class IdaBatchTests(unittest.TestCase):
         self.assertIn("imports", metadata)
         self.assertIn("segments", metadata)
 
+    def test_ida_batch_function_metadata_records_data_refs(self) -> None:
+        originals = {
+            "_func_items": ida_batch_module._func_items,
+            "_code_refs_from": ida_batch_module._code_refs_from,
+            "_data_refs_from": ida_batch_module._data_refs_from,
+            "_segment_name": ida_batch_module._segment_name,
+            "_function_name": ida_batch_module._function_name,
+            "_disasm_line_for_ea": ida_batch_module._disasm_line_for_ea,
+            "_name_for_ea": ida_batch_module._name_for_ea,
+        }
+        try:
+            ida_batch_module._func_items = lambda _ea: [0x140002010]
+            ida_batch_module._code_refs_from = lambda _ea: []
+            ida_batch_module._data_refs_from = lambda _ea: [0x140020000]
+            ida_batch_module._segment_name = lambda ea: ".rdata" if ea == 0x140020000 else ".text"
+            ida_batch_module._function_name = lambda _ea: "DeviceControlDispatch"
+            ida_batch_module._disasm_line_for_ea = lambda _ea: "lea rcx, aDevicePseudoForge"
+            ida_batch_module._name_for_ea = lambda _ea: "aDevicePseudoForge"
+
+            metadata = ida_batch_module._collect_function_metadata(
+                0x140002000,
+                imports_by_ea={},
+                strings_by_ea={0x140020000: {"ea": "0x140020000", "value": "\\Device\\PseudoForge"}},
+                names_by_ea={0x140020000: {"ea": "0x140020000", "name": "aDevicePseudoForge"}},
+            )
+        finally:
+            for name, value in originals.items():
+                setattr(ida_batch_module, name, value)
+
+        self.assertEqual(1, metadata["data_ref_count"])
+        self.assertEqual("aDevicePseudoForge", metadata["data_refs"][0]["target_name"])
+        self.assertEqual("string", metadata["data_refs"][0]["ref_kind"])
+        self.assertEqual("\\Device\\PseudoForge", metadata["data_refs"][0]["value"])
+
     def test_ida_batch_profile_context_preserves_idb_arch_for_target_binary(self) -> None:
         context = _batch_profile_context(
             Path(r"D:\bin\os\26200.8457\ntoskrnl.exe.i64"),
@@ -616,6 +650,42 @@ __int64 __fastcall TimeoutCandidate(int a1)
             self.assertEqual(summary["llm_provider"], "ollama")
             self.assertEqual(summary["artifacts"]["llm_candidate_cache"], str(Path(temp_dir) / "cache.json"))
             self.assertEqual(summary["artifacts"]["warning_diagnostics"], artifacts["warning_diagnostics"])
+
+    def test_ida_batch_export_can_write_full_disassembly_artifact(self) -> None:
+        original = ida_batch_module._function_disassembly_text
+        ida_batch_module._function_disassembly_text = (
+            lambda _ea, _name: "; test disassembly\n0000000140001000  ret"
+        )
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                capture = capture_from_pseudocode(
+                    BATCH_BOOLEAN_SAMPLE,
+                    name="BatchDisasmExport",
+                    ea=0x140001000,
+                )
+                plan = build_clean_plan(capture)
+                cleaned = render_cleaned_pseudocode(capture, plan)
+
+                export = _write_export_artifacts(
+                    Path(temp_dir),
+                    capture,
+                    plan,
+                    cleaned,
+                    aliases={},
+                    llm_status="ok",
+                    llm_error="",
+                    llm_error_class="",
+                    llm_error_summary="",
+                    llm_info={"enabled": False},
+                )
+
+                artifacts = export["artifacts"]
+                summary = json.loads(Path(artifacts["summary"]).read_text(encoding="utf-8"))
+                self.assertIn("disassembly", artifacts)
+                self.assertIn("test disassembly", Path(artifacts["disassembly"]).read_text(encoding="utf-8"))
+                self.assertEqual(artifacts["disassembly"], summary["artifacts"]["disassembly"])
+        finally:
+            ida_batch_module._function_disassembly_text = original
 
     def test_ida_batch_type_assisted_preview_writes_separate_artifacts(self) -> None:
         class FakeProposal:

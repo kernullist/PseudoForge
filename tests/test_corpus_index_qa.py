@@ -57,6 +57,9 @@ class CorpusIndexQaTests(unittest.TestCase):
             self.assertIn("ioctl", tags_by_name["DeviceControlDispatch"])
             self.assertIn("dispatch", tags_by_name["DeviceControlDispatch"])
             self.assertIn("ioctl", cluster_tags)
+            device = next(item for item in index["functions"] if item["name"] == "DeviceControlDispatch")
+            self.assertEqual("\\Device\\PseudoForge", device["data_refs"][0]["value"])
+            self.assertIn("disassembly", device["artifacts"])
             self.assertTrue((root / "pseudoforge-corpus-index.json").exists())
             self.assertTrue((root / "pseudoforge-corpus-overview.md").exists())
 
@@ -197,6 +200,18 @@ def _write_sample_corpus(root: Path) -> None:
                             {"ea": "0x180001000", "module": "ntoskrnl.exe", "name": "IoGetCurrentIrpStackLocation"}
                         ],
                         "strings_referenced": [{"ea": "0x140020000", "value": "\\Device\\PseudoForge"}],
+                        "data_refs": [
+                            {
+                                "source_ea": "0x140002010",
+                                "target_ea": "0x140020000",
+                                "target_name": "aDevicePseudoForge",
+                                "segment": ".rdata",
+                                "ref_kind": "string",
+                                "value": "\\Device\\PseudoForge",
+                                "source_text": "lea rcx, aDevicePseudoForge",
+                            }
+                        ],
+                        "data_ref_count": 1,
                     },
                 ],
             },
@@ -226,6 +241,7 @@ def _write_function_bundle(
     buffer_contracts: list[dict[str, object]],
 ) -> None:
     cleaned_path = directory / ("%s.cleaned.cpp" % name)
+    disasm_path = directory / ("%s.disasm.asm" % name)
     raw_path = directory / ("%s.raw.cpp" % name)
     rename_map_path = directory / ("%s.rename-map.json" % name)
     warnings_path = directory / ("%s.warnings.json" % name)
@@ -233,6 +249,7 @@ def _write_function_bundle(
     rule_report_path = directory / ("%s.rule-report.json" % name)
     summary_path = directory / ("%s.ida-batch-summary.json" % name)
     cleaned_path.write_text(cleaned, encoding="utf-8")
+    disasm_path.write_text("; disassembly for %s\n" % name, encoding="utf-8")
     raw_path.write_text(cleaned, encoding="utf-8")
     rename_map_path.write_text(json.dumps({"renames": []}), encoding="utf-8")
     warnings_path.write_text(json.dumps(warnings), encoding="utf-8")
@@ -254,6 +271,7 @@ def _write_function_bundle(
                 "llm_status": "ok",
                 "artifacts": {
                     "cleaned_pseudocode": str(cleaned_path),
+                    "disassembly": str(disasm_path),
                     "raw_pseudocode": str(raw_path),
                     "rename_map": str(rename_map_path),
                     "warnings": str(warnings_path),

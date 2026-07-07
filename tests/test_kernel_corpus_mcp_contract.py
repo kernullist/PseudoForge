@@ -15,6 +15,8 @@ from tools.kernel_corpus.mcp_server import (
     DEFAULT_CANONICAL_DRIFT_REPORT_CHARS,
     DEFAULT_CANONICAL_MAX_TOPICS,
     DEFAULT_CANONICAL_TEXT_CHARS,
+    DEFAULT_DATA_REF_LIMIT,
+    DEFAULT_DISASSEMBLY_CHARS,
     DEFAULT_KNOWLEDGE_GRAPH_MAX_EDGES,
     DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES,
     DEFAULT_KNOWLEDGE_GRAPH_MAX_PATHS,
@@ -29,6 +31,8 @@ from tools.kernel_corpus.mcp_server import (
     MAX_CANONICAL_DRIFT_TOPICS,
     MAX_CANONICAL_TEXT_CHARS,
     MAX_CANONICAL_TOPICS,
+    MAX_DATA_REF_LIMIT,
+    MAX_DISASSEMBLY_CHARS,
     MAX_KNOWLEDGE_GRAPH_EDGES,
     MAX_KNOWLEDGE_GRAPH_NODES,
     MAX_KNOWLEDGE_GRAPH_PATHS,
@@ -49,6 +53,7 @@ EXPECTED_TOOLS = {
     "get_neighbors",
     "search_by_import",
     "search_by_string",
+    "search_by_data_ref",
     "trace_lifecycle",
     "build_evidence_pack",
     "generate_atlas",
@@ -75,6 +80,8 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
 
             self.assertEqual(EXPECTED_TOOLS, set(tools))
             search_limit = tools["search_functions"]["inputSchema"]["properties"]["limit"]
+            data_ref_limit = tools["get_function"]["inputSchema"]["properties"]["data_ref_limit"]
+            max_disassembly_chars = tools["get_function"]["inputSchema"]["properties"]["max_disassembly_chars"]
             neighbor_depth = tools["get_neighbors"]["inputSchema"]["properties"]["depth"]
             neighbor_limit = tools["get_neighbors"]["inputSchema"]["properties"]["limit"]
             lifecycle_max_seeds = tools["trace_lifecycle"]["inputSchema"]["properties"]["max_seeds"]
@@ -93,6 +100,10 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             function_roles_max_topics = tools["get_function_roles"]["inputSchema"]["properties"]["max_topics"]
             self.assertEqual(DEFAULT_LIMIT, search_limit["default"])
             self.assertEqual(MAX_LIMIT, search_limit["maximum"])
+            self.assertEqual(DEFAULT_DATA_REF_LIMIT, data_ref_limit["default"])
+            self.assertEqual(MAX_DATA_REF_LIMIT, data_ref_limit["maximum"])
+            self.assertEqual(DEFAULT_DISASSEMBLY_CHARS, max_disassembly_chars["default"])
+            self.assertEqual(MAX_DISASSEMBLY_CHARS, max_disassembly_chars["maximum"])
             self.assertEqual(DEFAULT_NEIGHBOR_DEPTH, neighbor_depth["default"])
             self.assertEqual(MAX_NEIGHBOR_DEPTH, neighbor_depth["maximum"])
             self.assertEqual(MAX_LIMIT, neighbor_limit["maximum"])
@@ -163,6 +174,24 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             self.assertIn("PspAllocateProcess", function["cleaned_excerpt"])
             self.assertTrue(Path(function["artifacts"]["summary"]).is_absolute())
             self.assertTrue(Path(function["artifacts"]["summary"]).is_file())
+            self.assertTrue(Path(function["artifacts"]["disassembly"]).is_file())
+            self.assertEqual("PsProcessType", function["data_refs"][0]["target_name"])
+
+    def test_get_function_can_return_disassembly_text_on_request(self) -> None:
+        with _built_pack() as pack_root:
+            payload = KernelCorpusMcpServer(pack_root).call_tool(
+                "get_function",
+                {
+                    "ea": "0x140002000",
+                    "include_disassembly": True,
+                    "max_disassembly_chars": 80,
+                },
+            )
+
+            self.assertTrue(payload["ok"])
+            function = payload["function"]
+            self.assertIn("PspAllocateProcess", function["disassembly"]["text"])
+            self.assertTrue(function["disassembly"]["truncated"])
 
     def test_get_neighbors_enforces_depth_and_limit_caps(self) -> None:
         with _built_pack() as pack_root:
@@ -188,12 +217,15 @@ class KernelCorpusMcpContractTests(unittest.TestCase):
             server = KernelCorpusMcpServer(pack_root)
             import_payload = server.call_tool("search_by_import", {"query": "ExAllocate"})
             string_payload = server.call_tool("search_by_string", {"query": "ProcessDelete"})
+            data_ref_payload = server.call_tool("search_by_data_ref", {"query": "PsProcessType"})
 
             self.assertTrue(import_payload["ok"])
             self.assertEqual(DEFAULT_LIMIT, import_payload["limit"])
             self.assertEqual(["PspAllocateProcess"], [item["name"] for item in import_payload["results"]])
             self.assertTrue(string_payload["ok"])
             self.assertEqual(["PspProcessDelete"], [item["name"] for item in string_payload["results"]])
+            self.assertTrue(data_ref_payload["ok"])
+            self.assertEqual(["PspAllocateProcess"], [item["name"] for item in data_ref_payload["results"]])
 
     def test_build_evidence_pack_returns_gaps_as_warnings_without_writing(self) -> None:
         with _built_pack() as pack_root:

@@ -9,6 +9,7 @@
   "buffer_contracts": 0,
   "artifacts": {
     "cleaned_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.cleaned.cpp",
+    "disassembly": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.disasm.asm",
     "raw_pseudocode": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.raw.cpp",
     "summary": "tests/fixtures/kernel_corpus/minimal/functions/0000000140001000_NtCreateUserProcess/function.ida-batch-summary.json"
   }

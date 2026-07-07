@@ -529,7 +529,9 @@ python -B .\tools\kernel_corpus\query.py get-function `
   --ea 0x140001000
 ```
 
-Use `--no-excerpt` or `--no-artifacts` when you only need compact metadata.
+Use `--include-disassembly` when you need bounded full-function disassembly text
+alongside pseudocode evidence. Use `--no-excerpt`, `--no-artifacts`, or
+`--no-data-refs` when you only need compact metadata.
 
 ### Traverse Call Neighbors
 
@@ -555,6 +557,13 @@ python -B .\tools\kernel_corpus\query.py search-import `
 python -B .\tools\kernel_corpus\query.py search-string `
   --pack-root $PackRoot `
   --query "Process" `
+  --limit 20
+```
+
+```powershell
+python -B .\tools\kernel_corpus\query.py search-data-ref `
+  --pack-root $PackRoot `
+  --query "PsProcessType" `
   --limit 20
 ```
 

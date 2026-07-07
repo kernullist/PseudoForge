@@ -189,6 +189,7 @@ def _build_function_index_item(
     ]
     imports_called = _coerce_list(metadata.get("imports_called", []))
     strings_referenced = _coerce_list(metadata.get("strings_referenced", []))
+    data_refs = _coerce_list(metadata.get("data_refs", []))
     interesting_lines = _interesting_lines(cleaned_text or raw_text)
     tags = _classify_function(
         name=name,
@@ -204,6 +205,7 @@ def _build_function_index_item(
         | set(tags)
         | _tokens(" ".join(str(item.get("name", "")) for item in imports_called if isinstance(item, dict)))
         | _tokens(" ".join(str(item.get("value", "")) for item in strings_referenced if isinstance(item, dict)))
+        | _tokens(" ".join(_data_ref_search_text(item) for item in data_refs if isinstance(item, dict)))
         | _tokens("\n".join(interesting_lines))
     )
     return {
@@ -224,6 +226,7 @@ def _build_function_index_item(
             "warnings": int(summary.get("warnings", len(warnings)) or 0),
             "active_renames": len(active_renames),
             "matched_rules": int(_coerce_dict(summary.get("rule_diagnostics", {})).get("matched_rules", 0) or 0),
+            "data_refs": len(data_refs),
         },
         "llm_status": str(summary.get("llm_status", "")),
         "llm_provider": str(summary.get("llm_provider", "")),
@@ -233,6 +236,7 @@ def _build_function_index_item(
         "caller_names": [str(item) for item in _coerce_list(metadata.get("caller_names", []))],
         "imports_called": imports_called[:64],
         "strings_referenced": strings_referenced[:64],
+        "data_refs": data_refs,
         "interesting_lines": interesting_lines[:32],
         "cleaned_excerpt": (cleaned_text or raw_text)[:max_cleaned_chars],
     }
@@ -409,6 +413,13 @@ def _interesting_lines(text: str) -> list[str]:
 
 def _tokens(text: str) -> set[str]:
     return {item.lower() for item in _TOKEN_RE.findall(text or "")}
+
+
+def _data_ref_search_text(item: dict[str, Any]) -> str:
+    return " ".join(
+        str(item.get(key, "") or "")
+        for key in ("target_ea", "target_name", "segment", "ref_kind", "value")
+    )
 
 
 def _artifact_path(artifacts: dict[str, Any], key: str) -> Path:

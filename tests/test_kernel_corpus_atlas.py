@@ -49,7 +49,7 @@ class KernelCorpusAtlasTests(unittest.TestCase):
                 text = (output_dir / filename).read_text(encoding="utf-8")
                 self.assertIn("## Corpus Identity", text)
                 self.assertIn("Pack root:", text)
-                self.assertIn("Schema: `kernel_corpus_pack_v1`", text)
+                self.assertIn("Schema: `kernel_corpus_pack_v2`", text)
                 self.assertIn("Target: `minimal.i64`", text)
                 self.assertIn("Functions: `3`", text)
                 self.assertIn("Manifest:", text)

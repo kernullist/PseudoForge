@@ -279,10 +279,12 @@ CREATE TABLE functions (
     cleaned_path TEXT,
     raw_path TEXT,
     diff_path TEXT,
+    disasm_path TEXT,
     mode TEXT,
     llm_status TEXT,
     warning_count INTEGER NOT NULL DEFAULT 0,
     buffer_contract_count INTEGER NOT NULL DEFAULT 0,
+    data_ref_count INTEGER NOT NULL DEFAULT 0,
     cleaned_excerpt TEXT
 );
 
@@ -307,6 +309,18 @@ CREATE TABLE function_imports (
 CREATE TABLE function_strings (
     ea TEXT NOT NULL,
     string_value TEXT NOT NULL
+);
+
+CREATE TABLE function_data_refs (
+    ea TEXT NOT NULL,
+    source_ea TEXT NOT NULL,
+    target_ea TEXT NOT NULL,
+    target_name TEXT NOT NULL DEFAULT '',
+    segment TEXT NOT NULL DEFAULT '',
+    ref_kind TEXT NOT NULL DEFAULT '',
+    value TEXT NOT NULL DEFAULT '',
+    source_text TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (ea, source_ea, target_ea, ref_kind, target_name, value)
 );
 
 CREATE VIRTUAL TABLE function_fts USING fts5(
@@ -384,15 +398,16 @@ retrieve and cite target-specific functions before answering.
 
 The MCP server is a read-only interface over the pack.
 
-Implemented v1 tools:
+Implemented read-only tools:
 
 ```text
 corpus_status(pack_root)
 search_functions(pack_root, query, tags, name_regex, limit)
-get_function(pack_root, ea, include_excerpt, include_artifacts)
+get_function(pack_root, ea, include_excerpt, include_artifacts, include_data_refs, data_ref_limit, include_disassembly, max_disassembly_chars)
 get_neighbors(pack_root, ea, direction, depth, limit)
 search_by_import(pack_root, import_query, limit)
 search_by_string(pack_root, string_query, limit)
+search_by_data_ref(pack_root, data_query, limit)
 build_evidence_pack(pack_root, eas, topic, output_path)
 trace_lifecycle(pack_root, topic, max_seeds, depth, output_path)
 generate_atlas(pack_root, output_dir, limit)
@@ -1294,8 +1309,8 @@ tests/test_kernel_corpus_builder.py
 Acceptance:
 
 - Build `corpus.sqlite` from a PseudoForge corpus index.
-- Import function count, tags, artifacts, call edges, imports, strings, and
-  FTS rows.
+- Import function count, tags, artifacts, disassembly paths, call edges,
+  imports, strings, data refs, and FTS rows.
 - Validate against the merged ntoskrnl corpus:
   - 29964 indexed functions
   - 29964 unique EAs

@@ -167,6 +167,11 @@ python -B .\tools\kernel_corpus\query.py get-function `
   --ea 0x140001000
 ```
 
+Add `--include-disassembly` when cleaned pseudocode may be misleading. The
+result includes bounded full-function disassembly text plus the disassembly
+artifact path. Function results also include data references when the pack was
+built from v2 metadata.
+
 Traverse callers and callees:
 
 ```powershell
@@ -188,6 +193,10 @@ python -B .\tools\kernel_corpus\query.py search-import `
 python -B .\tools\kernel_corpus\query.py search-string `
   --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
   --query Process
+
+python -B .\tools\kernel_corpus\query.py search-data-ref `
+  --pack-root "F:\kernullist\PseudoForge\pseudoforge_out\kernel_corpus\ntoskrnl" `
+  --query PsProcessType
 ```
 
 ## Build Focused Evidence Packs
@@ -1192,6 +1201,7 @@ Implemented tools:
 - `get_neighbors`
 - `search_by_import`
 - `search_by_string`
+- `search_by_data_ref`
 - `build_evidence_pack`
 - `trace_lifecycle`
 - `generate_atlas`

@@ -22,6 +22,10 @@ DEFAULT_SEARCH_LIMIT = 20
 MAX_SEARCH_LIMIT = 200
 DEFAULT_NEIGHBOR_LIMIT = 100
 MAX_NEIGHBOR_LIMIT = 1000
+DEFAULT_DATA_REF_LIMIT = 200
+MAX_DATA_REF_LIMIT = 5000
+DEFAULT_DISASSEMBLY_CHARS = 120000
+MAX_DISASSEMBLY_CHARS = 1000000
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,8 +46,8 @@ def corpus_status(pack_root: str | Path) -> dict[str, Any]:
     warnings = []
     counts: dict[str, int] = {}
     with connect_database(paths["sqlite_path"]) as connection:
-        for table in ("functions", "function_tags", "call_edges", "function_imports", "function_strings"):
-            counts[table] = _table_count(connection, table)
+        for table in ("functions", "function_tags", "call_edges", "function_imports", "function_strings", "function_data_refs"):
+            counts[table] = _table_count(connection, table) if _has_table(connection, table) else 0
         counts["function_fts"] = _manifest_int(manifest, "fts_row_count")
         if counts["function_fts"] < 0:
             counts["function_fts"] = _table_count(connection, "function_fts") if _has_fts(connection) else 0
@@ -127,6 +131,10 @@ def get_function(
     ea: str | int,
     include_excerpt: bool = True,
     include_artifacts: bool = True,
+    include_data_refs: bool = True,
+    data_ref_limit: int = DEFAULT_DATA_REF_LIMIT,
+    include_disassembly: bool = False,
+    max_disassembly_chars: int = DEFAULT_DISASSEMBLY_CHARS,
 ) -> dict[str, Any]:
     paths = _pack_paths(pack_root)
     normalized = normalize_ea(ea)
@@ -139,6 +147,10 @@ def get_function(
             include_excerpt=include_excerpt,
             include_artifacts=include_artifacts,
             check_artifacts=True,
+            include_data_refs=include_data_refs,
+            data_ref_limit=data_ref_limit,
+            include_disassembly=include_disassembly,
+            max_disassembly_chars=max_disassembly_chars,
             reasons=set(),
         )
 
@@ -249,6 +261,65 @@ def search_by_string(pack_root: str | Path, string_query: str, limit: int = DEFA
     return _search_by_value(pack_root, "function_strings", "string_value", str(string_query or ""), "string", limit)
 
 
+def search_by_data_ref(pack_root: str | Path, data_query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict[str, Any]]:
+    paths = _pack_paths(pack_root)
+    bounded_limit = _bounded_limit(limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
+    query_text = str(data_query or "").strip()
+    if not query_text:
+        return []
+    normalized_ea = ""
+    try:
+        normalized_ea = normalize_ea(query_text)
+    except (TypeError, ValueError):
+        normalized_ea = ""
+    like = "%%%s%%" % query_text
+    with connect_database(paths["sqlite_path"]) as connection:
+        if not _has_table(connection, "function_data_refs"):
+            return []
+        rows = list(
+            connection.execute(
+                """
+                SELECT DISTINCT f.ea
+                FROM function_data_refs r
+                JOIN functions f ON f.ea = r.ea
+                WHERE r.target_ea = ?
+                   OR r.target_name LIKE ?
+                   OR r.value LIKE ?
+                   OR r.segment LIKE ?
+                ORDER BY f.ea
+                LIMIT ?
+                """,
+                (normalized_ea, like, like, like, bounded_limit),
+            )
+        )
+        results = []
+        for row in rows:
+            ea = str(row["ea"])
+            matched_refs = _data_refs_for_ea(
+                connection,
+                ea,
+                limit=min(25, MAX_DATA_REF_LIMIT),
+                query=query_text,
+            )
+            reasons = {
+                "data_ref:%s" % _data_ref_reason(ref)
+                for ref in matched_refs
+            }
+            payload = _function_payload(
+                connection,
+                ea,
+                include_excerpt=False,
+                include_artifacts=True,
+                check_artifacts=False,
+                include_data_refs=False,
+                include_disassembly=False,
+                reasons=reasons,
+            )
+            payload["matched_data_refs"] = matched_refs
+            results.append(payload)
+        return results
+
+
 def build_evidence_pack(
     pack_root: str | Path,
     eas: list[str | int] | tuple[str | int, ...],
@@ -273,6 +344,9 @@ def build_evidence_pack(
                     include_excerpt=True,
                     include_artifacts=True,
                     check_artifacts=True,
+                    include_data_refs=True,
+                    data_ref_limit=DEFAULT_DATA_REF_LIMIT,
+                    include_disassembly=False,
                     reasons={"requested"},
                 )
             )
@@ -333,6 +407,10 @@ def _build_parser() -> argparse.ArgumentParser:
     get_function_parser.add_argument("--ea", required=True, help="Function EA.")
     get_function_parser.add_argument("--no-excerpt", action="store_true", help="Omit cleaned excerpt.")
     get_function_parser.add_argument("--no-artifacts", action="store_true", help="Omit artifact paths.")
+    get_function_parser.add_argument("--no-data-refs", action="store_true", help="Omit function data references.")
+    get_function_parser.add_argument("--data-ref-limit", type=int, default=DEFAULT_DATA_REF_LIMIT, help="Maximum data refs to return.")
+    get_function_parser.add_argument("--include-disassembly", action="store_true", help="Include bounded full-function disassembly text.")
+    get_function_parser.add_argument("--max-disassembly-chars", type=int, default=DEFAULT_DISASSEMBLY_CHARS, help="Maximum disassembly text chars.")
 
     neighbors = subparsers.add_parser("neighbors", help="Traverse caller/callee edges.")
     _add_pack_root(neighbors)
@@ -350,6 +428,11 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_pack_root(search_string)
     search_string.add_argument("--query", required=True, help="String substring.")
     search_string.add_argument("--limit", type=int, default=DEFAULT_SEARCH_LIMIT)
+
+    search_data_ref = subparsers.add_parser("search-data-ref", help="Search functions by referenced data EA, name, segment, or value.")
+    _add_pack_root(search_data_ref)
+    search_data_ref.add_argument("--query", required=True, help="Data reference substring or target EA.")
+    search_data_ref.add_argument("--limit", type=int, default=DEFAULT_SEARCH_LIMIT)
 
     evidence = subparsers.add_parser("build-evidence-pack", help="Build a focused evidence pack from EAs.")
     _add_pack_root(evidence)
@@ -369,13 +452,24 @@ def _run_command(args: argparse.Namespace) -> Any:
             "results": search_functions(args.pack_root, query=args.query, tags=args.tag, name_regex=args.name_regex, limit=args.limit),
         }
     if args.command == "get-function":
-        return get_function(args.pack_root, args.ea, include_excerpt=not args.no_excerpt, include_artifacts=not args.no_artifacts)
+        return get_function(
+            args.pack_root,
+            args.ea,
+            include_excerpt=not args.no_excerpt,
+            include_artifacts=not args.no_artifacts,
+            include_data_refs=not args.no_data_refs,
+            data_ref_limit=args.data_ref_limit,
+            include_disassembly=bool(args.include_disassembly),
+            max_disassembly_chars=args.max_disassembly_chars,
+        )
     if args.command == "neighbors":
         return get_neighbors(args.pack_root, args.ea, direction=args.direction, depth=args.depth, limit=args.limit)
     if args.command == "search-import":
         return {"ok": True, "results": search_by_import(args.pack_root, args.query, limit=args.limit)}
     if args.command == "search-string":
         return {"ok": True, "results": search_by_string(args.pack_root, args.query, limit=args.limit)}
+    if args.command == "search-data-ref":
+        return {"ok": True, "results": search_by_data_ref(args.pack_root, args.query, limit=args.limit)}
     if args.command == "build-evidence-pack":
         return build_evidence_pack(
             args.pack_root,
@@ -537,6 +631,10 @@ def _function_payload(
     include_excerpt: bool,
     include_artifacts: bool,
     check_artifacts: bool,
+    include_data_refs: bool = False,
+    data_ref_limit: int = DEFAULT_DATA_REF_LIMIT,
+    include_disassembly: bool = False,
+    max_disassembly_chars: int = DEFAULT_DISASSEMBLY_CHARS,
     reasons: set[str],
 ) -> dict[str, Any]:
     row = connection.execute("SELECT * FROM functions WHERE ea = ?", (ea,)).fetchone()
@@ -550,6 +648,7 @@ def _function_payload(
         "llm_status": str(row["llm_status"] or ""),
         "warning_count": int(row["warning_count"] or 0),
         "buffer_contract_count": int(row["buffer_contract_count"] or 0),
+        "data_ref_count": int(_row_value(row, "data_ref_count", _data_ref_count(connection, ea)) or 0),
         "why_selected": sorted(reasons),
         "warnings": [],
     }
@@ -560,6 +659,7 @@ def _function_payload(
             "cleaned_pseudocode": str(row["cleaned_path"] or ""),
             "raw_pseudocode": str(row["raw_path"] or ""),
             "raw_vs_cleaned_diff": str(row["diff_path"] or ""),
+            "disassembly": str(_row_value(row, "disasm_path", "") or ""),
         }
         payload["artifacts"] = artifacts
         if check_artifacts:
@@ -569,6 +669,25 @@ def _function_payload(
         payload["cleaned_path"] = str(row["cleaned_path"] or "")
     if include_excerpt:
         payload["cleaned_excerpt"] = str(row["cleaned_excerpt"] or "")
+    if include_data_refs:
+        bounded_data_ref_limit = _bounded_limit(data_ref_limit, DEFAULT_DATA_REF_LIMIT, MAX_DATA_REF_LIMIT)
+        refs = _data_refs_for_ea(connection, ea, limit=bounded_data_ref_limit)
+        payload["data_refs"] = refs
+        payload["data_refs_truncated"] = len(refs) < int(payload["data_ref_count"])
+        if payload["data_refs_truncated"]:
+            payload["warnings"].append(
+                "Data refs truncated: returned %d of %d." % (len(refs), int(payload["data_ref_count"]))
+            )
+    if include_disassembly:
+        max_chars = _bounded_limit(max_disassembly_chars, DEFAULT_DISASSEMBLY_CHARS, MAX_DISASSEMBLY_CHARS)
+        disasm_path = ""
+        if include_artifacts:
+            disasm_path = str(payload.get("artifacts", {}).get("disassembly", "") or "")
+        else:
+            disasm_path = str(_row_value(row, "disasm_path", "") or "")
+        disassembly = _read_bounded_text_artifact(disasm_path, max_chars)
+        payload["disassembly"] = disassembly
+        payload["warnings"].extend(disassembly.get("warnings", []))
     return payload
 
 
@@ -594,6 +713,67 @@ def _dedupe_edges(edges: list[dict[str, str]]) -> list[dict[str, str]]:
         seen.add(key)
         result.append(edge)
     return result
+
+
+def _data_refs_for_ea(
+    connection: sqlite3.Connection,
+    ea: str,
+    *,
+    limit: int,
+    query: str = "",
+) -> list[dict[str, Any]]:
+    if not _has_table(connection, "function_data_refs"):
+        return []
+    bounded_limit = _bounded_limit(limit, DEFAULT_DATA_REF_LIMIT, MAX_DATA_REF_LIMIT)
+    query_text = str(query or "").strip()
+    params: tuple[Any, ...]
+    where = "ea = ?"
+    params = (ea,)
+    if query_text:
+        like = "%%%s%%" % query_text
+        normalized_ea = ""
+        try:
+            normalized_ea = normalize_ea(query_text)
+        except (TypeError, ValueError):
+            normalized_ea = ""
+        where += " AND (target_ea = ? OR target_name LIKE ? OR value LIKE ? OR segment LIKE ?)"
+        params = (ea, normalized_ea, like, like, like)
+    rows = connection.execute(
+        """
+        SELECT source_ea, target_ea, target_name, segment, ref_kind, value, source_text
+        FROM function_data_refs
+        WHERE %s
+        ORDER BY target_ea, source_ea, ref_kind, target_name, value
+        LIMIT ?
+        """ % where,
+        params + (bounded_limit,),
+    )
+    return [
+        {
+            "source_ea": str(row["source_ea"]),
+            "target_ea": str(row["target_ea"]),
+            "target_name": str(row["target_name"] or ""),
+            "segment": str(row["segment"] or ""),
+            "ref_kind": str(row["ref_kind"] or ""),
+            "value": str(row["value"] or ""),
+            "source_text": str(row["source_text"] or ""),
+        }
+        for row in rows
+    ]
+
+
+def _data_ref_count(connection: sqlite3.Connection, ea: str) -> int:
+    if not _has_table(connection, "function_data_refs"):
+        return 0
+    return int(connection.execute("SELECT COUNT(*) FROM function_data_refs WHERE ea = ?", (ea,)).fetchone()[0])
+
+
+def _data_ref_reason(ref: dict[str, Any]) -> str:
+    for key in ("target_name", "value", "target_ea", "segment"):
+        value = str(ref.get(key, "") or "")
+        if value:
+            return value
+    return "unknown"
 
 
 def _tags_for_ea(connection: sqlite3.Connection, ea: str) -> list[str]:
@@ -641,9 +821,14 @@ def _score_candidate(name: str, query: str, reasons: set[str]) -> int:
 
 
 def _has_fts(connection: sqlite3.Connection) -> bool:
+    return _has_table(connection, "function_fts")
+
+
+def _has_table(connection: sqlite3.Connection, table: str) -> bool:
     return (
         connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'function_fts'"
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table,),
         ).fetchone()
         is not None
     )
@@ -672,6 +857,49 @@ def _artifact_warnings(artifacts: dict[str, str]) -> list[str]:
         if not exists:
             warnings.append("Missing artifact %s: %s" % (key, value))
     return warnings
+
+
+def _read_bounded_text_artifact(path_text: str, max_chars: int) -> dict[str, Any]:
+    path_value = str(path_text or "")
+    if not path_value:
+        return {
+            "path": "",
+            "text": "",
+            "char_count": 0,
+            "returned_chars": 0,
+            "truncated": False,
+            "warnings": ["Disassembly artifact is not available for this function."],
+        }
+    path = Path(path_value)
+    if not path.is_file():
+        return {
+            "path": path_value,
+            "text": "",
+            "char_count": 0,
+            "returned_chars": 0,
+            "truncated": False,
+            "warnings": ["Missing disassembly artifact: %s" % path_value],
+        }
+    text = path.read_text(encoding="utf-8", errors="replace")
+    bounded = max(0, int(max_chars or 0))
+    returned = text[:bounded]
+    return {
+        "path": str(path.resolve()),
+        "text": returned,
+        "char_count": len(text),
+        "returned_chars": len(returned),
+        "truncated": len(returned) < len(text),
+        "warnings": [],
+    }
+
+
+def _row_value(row: sqlite3.Row, key: str, default: Any = "") -> Any:
+    try:
+        if key in row.keys():
+            return row[key]
+    except Exception:
+        pass
+    return default
 
 
 def _bounded_limit(value: int, default: int, maximum: int) -> int:

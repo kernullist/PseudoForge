@@ -27,6 +27,7 @@ class KernelCorpusQueryTests(unittest.TestCase):
             self.assertEqual(3, status["counts"]["functions"])
             self.assertEqual(4, status["counts"]["function_tags"])
             self.assertEqual(1, status["counts"]["call_edges"])
+            self.assertEqual(2, status["counts"]["function_data_refs"])
             self.assertEqual([], status["warnings"])
 
     def test_search_functions_finds_by_name(self) -> None:
@@ -71,7 +72,24 @@ class KernelCorpusQueryTests(unittest.TestCase):
             self.assertEqual("PspAllocateProcess", function["name"])
             self.assertIn("PspAllocateProcess", function["cleaned_excerpt"])
             self.assertTrue(Path(function["artifacts"]["summary"]).is_file())
+            self.assertTrue(Path(function["artifacts"]["disassembly"]).is_file())
+            self.assertEqual(1, function["data_ref_count"])
+            self.assertEqual("PsProcessType", function["data_refs"][0]["target_name"])
             self.assertEqual([], function["warnings"])
+
+    def test_get_function_can_include_bounded_disassembly(self) -> None:
+        with _built_pack() as pack_root:
+            function = query.get_function(
+                pack_root,
+                "0x140002000",
+                include_disassembly=True,
+                max_disassembly_chars=80,
+            )
+
+            self.assertIn("disassembly", function)
+            self.assertTrue(function["disassembly"]["truncated"])
+            self.assertIn("PspAllocateProcess", function["disassembly"]["text"])
+            self.assertTrue(Path(function["disassembly"]["path"]).is_file())
 
     def test_get_function_reports_missing_artifact_as_warning(self) -> None:
         with _built_pack() as pack_root:
@@ -108,6 +126,17 @@ class KernelCorpusQueryTests(unittest.TestCase):
             self.assertIn("import:ExAllocatePool2", import_results[0]["why_selected"])
             self.assertEqual(["PspProcessDelete"], [item["name"] for item in string_results])
             self.assertIn("string:ProcessDelete", string_results[0]["why_selected"])
+
+    def test_search_by_data_ref_finds_named_data_and_strings(self) -> None:
+        with _built_pack() as pack_root:
+            named_results = query.search_by_data_ref(pack_root, "PsProcessType", limit=5)
+            string_results = query.search_by_data_ref(pack_root, "ProcessDelete", limit=5)
+
+            self.assertEqual(["PspAllocateProcess"], [item["name"] for item in named_results])
+            self.assertEqual("PsProcessType", named_results[0]["matched_data_refs"][0]["target_name"])
+            self.assertIn("data_ref:PsProcessType", named_results[0]["why_selected"])
+            self.assertEqual(["PspProcessDelete"], [item["name"] for item in string_results])
+            self.assertEqual("string", string_results[0]["matched_data_refs"][0]["ref_kind"])
 
     def test_build_evidence_pack_returns_functions_edges_and_writes_output(self) -> None:
         with _built_pack() as pack_root:

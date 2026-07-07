@@ -1172,6 +1172,7 @@ def _write_export_artifacts(
         cleaned_text,
         enabled=primary_cleaned_source == "type-assisted-preview",
     )
+    disassembly_artifacts = _write_full_disassembly_artifact(function_dir, capture)
     if type_assisted_preview is not None:
         extra_summary["type_assisted_preview"] = _type_assisted_preview_report_payload(type_assisted_preview)
         extra_summary["type_assisted_primary_decision"] = type_assisted_primary_decision
@@ -1188,6 +1189,7 @@ def _write_export_artifacts(
             **(llm_candidate_artifacts or {}),
             **type_assisted_artifacts,
             **deterministic_artifacts,
+            **disassembly_artifacts,
         },
         file_stem="function",
         apply_validated_layout_rewrites=apply_validated_layout_rewrites,
@@ -1198,6 +1200,47 @@ def _write_export_artifacts(
         "directory": str(function_dir),
         "artifacts": artifacts,
     }
+
+
+def _write_full_disassembly_artifact(function_dir: Path, capture: FunctionCapture) -> dict[str, str]:
+    text = _function_disassembly_text(capture.ea, capture.name)
+    if not text:
+        return {}
+    path = function_dir / "function.disasm.asm"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+    return {"disassembly": str(path)}
+
+
+def _function_disassembly_text(function_ea: int, function_name: str) -> str:
+    if ida_funcs is None or idautils is None:
+        return ""
+    try:
+        func = ida_funcs.get_func(function_ea)
+    except Exception:
+        func = None
+    if func is None:
+        return ""
+    start_ea = int(getattr(func, "start_ea", function_ea))
+    end_ea = int(getattr(func, "end_ea", start_ea))
+    if end_ea <= start_ea:
+        return ""
+    name = function_name or _function_name(start_ea)
+    lines = [
+        "; PseudoForge full function disassembly",
+        "; Function: %s" % name,
+        "; EA: 0x%X" % start_ea,
+        "; Range: 0x%X-0x%X" % (start_ea, end_ea),
+        "",
+    ]
+    for item_ea in _func_items(start_ea):
+        if item_ea < start_ea or item_ea >= end_ea:
+            continue
+        line = _disasm_line_for_ea(item_ea)
+        if not line:
+            continue
+        lines.append("%016X  %s" % (item_ea, line))
+    return "\n".join(lines) if len(lines) > 5 else ""
 
 
 def _primary_export_cleaned_text(
@@ -1452,11 +1495,13 @@ def _build_corpus_metadata(
     segments = _collect_segments()
     imports_by_ea = {_parse_hex_ea(item.get("ea", "")): item for item in imports}
     strings_by_ea = {_parse_hex_ea(item.get("ea", "")): item for item in strings}
+    names_by_ea = {_parse_hex_ea(item.get("ea", "")): item for item in names}
     imports_by_ea = {key: value for key, value in imports_by_ea.items() if key is not None}
     strings_by_ea = {key: value for key, value in strings_by_ea.items() if key is not None}
+    names_by_ea = {key: value for key, value in names_by_ea.items() if key is not None}
 
     functions = [
-        _collect_function_metadata(ea, imports_by_ea, strings_by_ea)
+        _collect_function_metadata(ea, imports_by_ea, strings_by_ea, names_by_ea)
         for ea in selected_eas
     ]
     functions = [item for item in functions if item]
@@ -1504,6 +1549,7 @@ def _collect_function_metadata(
     ea: int,
     imports_by_ea: dict[int, dict[str, Any]],
     strings_by_ea: dict[int, dict[str, Any]],
+    names_by_ea: dict[int, dict[str, Any]],
 ) -> dict[str, Any]:
     func = ida_funcs.get_func(ea) if ida_funcs is not None else None
     start_ea = int(getattr(func, "start_ea", ea) if func is not None else ea)
@@ -1512,6 +1558,7 @@ def _collect_function_metadata(
     callee_eas: set[int] = set()
     import_refs: dict[int, dict[str, Any]] = {}
     string_refs: dict[int, dict[str, Any]] = {}
+    data_refs: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     code_ref_count = 0
     data_ref_count = 0
 
@@ -1531,6 +1578,21 @@ def _collect_function_metadata(
             string_record = strings_by_ea.get(target_ea)
             if string_record is not None:
                 string_refs[target_ea] = string_record
+            data_ref = _data_ref_record(
+                item_ea,
+                target_ea,
+                imports_by_ea,
+                strings_by_ea,
+                names_by_ea,
+            )
+            key = (
+                str(data_ref.get("source_ea", "")),
+                str(data_ref.get("target_ea", "")),
+                str(data_ref.get("ref_kind", "")),
+                str(data_ref.get("target_name", "")),
+                str(data_ref.get("value", "")),
+            )
+            data_refs[key] = data_ref
 
     return {
         "ea": _format_ea(start_ea),
@@ -1547,8 +1609,45 @@ def _collect_function_metadata(
         "caller_names": [],
         "imports_called": list(import_refs.values()),
         "strings_referenced": list(string_refs.values()),
+        "data_refs": [data_refs[key] for key in sorted(data_refs)],
         "code_ref_count": code_ref_count,
         "data_ref_count": data_ref_count,
+    }
+
+
+def _data_ref_record(
+    source_ea: int,
+    target_ea: int,
+    imports_by_ea: dict[int, dict[str, Any]],
+    strings_by_ea: dict[int, dict[str, Any]],
+    names_by_ea: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    import_record = imports_by_ea.get(target_ea)
+    string_record = strings_by_ea.get(target_ea)
+    name_record = names_by_ea.get(target_ea)
+    target_name = str((name_record or {}).get("name", "") or _name_for_ea(target_ea))
+    ref_kind = "data"
+    value = ""
+    if string_record is not None:
+        ref_kind = "string"
+        value = str(string_record.get("value", "") or "")
+        if not target_name:
+            target_name = str(string_record.get("name", "") or "")
+    elif import_record is not None:
+        ref_kind = "import"
+        value = str(import_record.get("name", "") or "")
+        if not target_name:
+            target_name = value
+    elif target_name:
+        ref_kind = "named_data"
+    return {
+        "source_ea": _format_ea(source_ea),
+        "target_ea": _format_ea(target_ea),
+        "target_name": target_name,
+        "segment": _segment_name(target_ea),
+        "ref_kind": ref_kind,
+        "value": value,
+        "source_text": _disasm_line_for_ea(source_ea)[:512],
     }
 
 
@@ -1704,6 +1803,55 @@ def _data_refs_from(ea: int) -> list[int]:
         return []
 
 
+def _disasm_line_for_ea(ea: int) -> str:
+    if idc is None:
+        return ""
+    generator = getattr(idc, "generate_disasm_line", None)
+    if callable(generator):
+        try:
+            line = str(generator(ea, 0) or "").strip()
+            if idaapi is not None:
+                try:
+                    line = str(idaapi.tag_remove(line) or line).strip()
+                except Exception:
+                    pass
+            if line:
+                return line
+        except Exception:
+            pass
+    mnemonic_getter = getattr(idc, "print_insn_mnem", None)
+    if not callable(mnemonic_getter):
+        return ""
+    try:
+        mnemonic = str(mnemonic_getter(ea) or "").strip()
+    except Exception:
+        mnemonic = ""
+    if not mnemonic:
+        return ""
+    operands = _instruction_operands(ea)
+    if operands:
+        return "%s %s" % (mnemonic, ", ".join(operands))
+    return mnemonic
+
+
+def _instruction_operands(ea: int) -> list[str]:
+    if idc is None:
+        return []
+    result: list[str] = []
+    operand_getter = getattr(idc, "print_operand", None)
+    if not callable(operand_getter):
+        return result
+    for index in range(8):
+        try:
+            operand = str(operand_getter(ea, index) or "").strip()
+        except Exception:
+            operand = ""
+        if not operand:
+            continue
+        result.append(operand)
+    return result
+
+
 def _segment_name(ea: int) -> str:
     if idc is None:
         return ""
@@ -1728,6 +1876,25 @@ def _segment_end(ea: int) -> int:
             except Exception:
                 pass
     return ea
+
+
+def _name_for_ea(ea: int) -> str:
+    if idc is not None:
+        for attr_name in ("get_name", "Name"):
+            getter = getattr(idc, attr_name, None)
+            if callable(getter):
+                try:
+                    name = str(getter(ea) or "").strip()
+                except Exception:
+                    name = ""
+                if name:
+                    return name
+    if ida_funcs is not None:
+        try:
+            return str(ida_funcs.get_func_name(ea) or "").strip()
+        except Exception:
+            return ""
+    return ""
 
 
 def _image_base() -> int:

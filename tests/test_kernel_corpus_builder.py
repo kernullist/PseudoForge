@@ -46,6 +46,7 @@ class KernelCorpusBuilderTests(unittest.TestCase):
                 self.assertEqual(1, _count(connection, "call_edges"))
                 self.assertEqual(2, _count(connection, "function_imports"))
                 self.assertEqual(1, _count(connection, "function_strings"))
+                self.assertEqual(2, _count(connection, "function_data_refs"))
                 rows = read_manifest_rows(connection)
                 self.assertEqual(MANIFEST_SCHEMA_VERSION, rows["schema"])
                 self.assertEqual("3", rows["function_count"])
@@ -69,14 +70,21 @@ class KernelCorpusBuilderTests(unittest.TestCase):
                 ).fetchone()
                 self.assertEqual(("0x140001000", "0x140002000", "calls"), tuple(edge))
                 function = connection.execute(
-                    "SELECT summary_path, cleaned_path, raw_path, cleaned_excerpt FROM functions WHERE ea = ?",
+                    "SELECT summary_path, cleaned_path, raw_path, disasm_path, data_ref_count, cleaned_excerpt FROM functions WHERE ea = ?",
                     ("0x140002000",),
                 ).fetchone()
                 self.assertTrue(Path(function["summary_path"]).is_absolute())
                 self.assertTrue(Path(function["summary_path"]).is_file())
                 self.assertTrue(Path(function["cleaned_path"]).is_file())
                 self.assertTrue(Path(function["raw_path"]).is_file())
+                self.assertTrue(Path(function["disasm_path"]).is_file())
+                self.assertEqual(1, function["data_ref_count"])
                 self.assertIn("PspAllocateProcess", function["cleaned_excerpt"])
+                data_ref = connection.execute(
+                    "SELECT target_name, ref_kind FROM function_data_refs WHERE ea = ?",
+                    ("0x140002000",),
+                ).fetchone()
+                self.assertEqual(("PsProcessType", "named_data"), tuple(data_ref))
 
     def test_build_pack_refuses_existing_pack_without_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

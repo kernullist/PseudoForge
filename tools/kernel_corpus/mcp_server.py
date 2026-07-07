@@ -63,10 +63,15 @@ from tools.kernel_corpus.lifecycle import (
     trace_lifecycle,
 )
 from tools.kernel_corpus.query import (
+    DEFAULT_DATA_REF_LIMIT,
+    DEFAULT_DISASSEMBLY_CHARS,
+    MAX_DATA_REF_LIMIT,
+    MAX_DISASSEMBLY_CHARS,
     build_evidence_pack,
     corpus_status,
     get_function,
     get_neighbors,
+    search_by_data_ref,
     search_by_import,
     search_by_string,
     search_functions,
@@ -114,11 +119,21 @@ class KernelCorpusMcpServer:
                 )
                 return self._ok({"results": results, "limit": limit})
             if name == "get_function":
+                data_ref_limit = _bounded_limit(args.get("data_ref_limit"), DEFAULT_DATA_REF_LIMIT, MAX_DATA_REF_LIMIT)
+                max_disassembly_chars = _bounded_limit(
+                    args.get("max_disassembly_chars"),
+                    DEFAULT_DISASSEMBLY_CHARS,
+                    MAX_DISASSEMBLY_CHARS,
+                )
                 function = get_function(
                     self.pack_root,
                     _required(args, "ea"),
                     include_excerpt=bool(args.get("include_excerpt", True)),
                     include_artifacts=bool(args.get("include_artifacts", True)),
+                    include_data_refs=bool(args.get("include_data_refs", True)),
+                    data_ref_limit=data_ref_limit,
+                    include_disassembly=bool(args.get("include_disassembly", False)),
+                    max_disassembly_chars=max_disassembly_chars,
                 )
                 return self._ok({"function": function}, warnings=_coerce_warnings(function))
             if name == "get_neighbors":
@@ -149,6 +164,10 @@ class KernelCorpusMcpServer:
             if name == "search_by_string":
                 limit = _bounded_limit(args.get("limit"), DEFAULT_LIMIT, MAX_LIMIT)
                 results = search_by_string(self.pack_root, str(_required(args, "query")), limit=limit)
+                return self._ok({"results": results, "limit": limit})
+            if name == "search_by_data_ref":
+                limit = _bounded_limit(args.get("limit"), DEFAULT_LIMIT, MAX_LIMIT)
+                results = search_by_data_ref(self.pack_root, str(_required(args, "query")), limit=limit)
                 return self._ok({"results": results, "limit": limit})
             if name == "trace_lifecycle":
                 max_seeds = _bounded_limit(
@@ -735,7 +754,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "get_function",
-        "description": "Fetch one function by EA, including artifact paths and an excerpt by default.",
+        "description": "Fetch one function by EA, including artifact paths, data refs, and an excerpt by default.",
         "inputSchema": {
             "type": "object",
             "required": ["ea"],
@@ -743,6 +762,20 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "ea": {"type": "string"},
                 "include_excerpt": {"type": "boolean", "default": True},
                 "include_artifacts": {"type": "boolean", "default": True},
+                "include_data_refs": {"type": "boolean", "default": True},
+                "data_ref_limit": {
+                    "type": "integer",
+                    "default": DEFAULT_DATA_REF_LIMIT,
+                    "minimum": 1,
+                    "maximum": MAX_DATA_REF_LIMIT,
+                },
+                "include_disassembly": {"type": "boolean", "default": False},
+                "max_disassembly_chars": {
+                    "type": "integer",
+                    "default": DEFAULT_DISASSEMBLY_CHARS,
+                    "minimum": 1,
+                    "maximum": MAX_DISASSEMBLY_CHARS,
+                },
             },
             "additionalProperties": False,
         },
@@ -778,6 +811,19 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "search_by_string",
         "description": "Search functions that reference a string substring.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "default": DEFAULT_LIMIT, "minimum": 1, "maximum": MAX_LIMIT},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "search_by_data_ref",
+        "description": "Search functions that reference a data target EA, name, segment, or value substring.",
         "inputSchema": {
             "type": "object",
             "required": ["query"],

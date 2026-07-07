@@ -254,7 +254,7 @@ def _sqlite_counts(
     sqlite_path: Path,
 ) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for table in ("functions", "function_tags", "call_edges", "function_imports", "function_strings"):
+    for table in ("functions", "function_tags", "call_edges", "function_imports", "function_strings", "function_data_refs"):
         counts[table] = _table_count(connection, table, issues, sqlite_path)
     if _has_table(connection, "function_fts"):
         counts["function_fts"] = _table_count(connection, "function_fts", issues, sqlite_path)
@@ -276,6 +276,7 @@ def _validate_counts(
         ("edge_count", "call_edges"),
         ("import_count", "function_imports"),
         ("string_count", "function_strings"),
+        ("data_ref_count", "function_data_refs"),
     )
     for manifest_key, table_key in count_pairs:
         if manifest_key not in manifest:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-PACK_SCHEMA_VERSION = "kernel_corpus_pack_v1"
+PACK_SCHEMA_VERSION = "kernel_corpus_pack_v2"
 MANIFEST_SCHEMA_VERSION = "kernel_corpus_manifest_v1"
 EVIDENCE_PACK_SCHEMA_VERSION = "kernel_corpus_evidence_pack_v1"
 PSEUDOFORGE_INDEX_SCHEMA = "pseudoforge_corpus_index_v1"
